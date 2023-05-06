@@ -18,7 +18,7 @@ VECTOR_SEARCH_TOP_K = 10
 LLM_HISTORY_LEN = 3
 
 # Show reply with source text from input document
-REPLY_WITH_SOURCE = False
+REPLY_WITH_SOURCE = True
 
 class Query(BaseModel):
     query: str
@@ -31,37 +31,7 @@ async def document():
 async def get_local_doc_qa():
     global local_doc_qa
     local_doc_qa = LocalDocQA()
-    local_doc_qa.init_cfg(llm_model=LLM_MODEL,
-                          embedding_model=EMBEDDING_MODEL,
-                          embedding_device=EMBEDDING_DEVICE,
-                          llm_history_len=LLM_HISTORY_LEN,
-                          top_k=VECTOR_SEARCH_TOP_K)
-    
-
-@app.post("/file")
-async def upload_file(UserFile: UploadFile=File(...)):
-    global vs_path
-    response = {
-        "msg": None,
-        "status": 0
-    }
-    try:
-        filepath = './content/' + UserFile.filename
-        content = await UserFile.read()
-        # print(UserFile.filename)
-        with open(filepath, 'wb') as f:
-            f.write(content)
-        vs_path, files = local_doc_qa.init_knowledge_vector_store(filepath)
-        response = {
-            'msg': 'seccess' if len(files)>0 else 'fail',
-            'status': 1 if len(files)>0 else 0,
-            'loaded_files': files
-        }
-        
-    except Exception as err:
-        response["message"] = err
-        
-    return response 
+    local_doc_qa.init_cfg(top_k=3)
 
 @app.post("/qa")
 async def get_answer(UserQuery: Query):
@@ -74,7 +44,6 @@ async def get_answer(UserQuery: Query):
     history = []
     try:
         resp, history = local_doc_qa.get_knowledge_based_answer(query=UserQuery.query,
-                                                                vs_path=vs_path,
                                                                 chat_history=history)
         if REPLY_WITH_SOURCE:
             response["answer"] = resp
@@ -85,6 +54,7 @@ async def get_answer(UserQuery: Query):
         response["status"] = 1
 
     except Exception as err:
+        print(err)
         response["message"] = err
         
     return response
