@@ -1,4 +1,8 @@
 from langchain.chains import RetrievalQA
+from langchain.vectorstores import AnalyticDB
+from langchain.embeddings import OpenAIEmbeddings
+from langchain.retrievers import ChatGPTPluginRetriever
+from langchain import VectorDBQA, OpenAI
 from langchain.prompts import PromptTemplate
 from langchain.embeddings.huggingface import HuggingFaceEmbeddings
 from langchain.vectorstores import FAISS
@@ -43,15 +47,10 @@ class LocalDocQA:
                  top_k=VECTOR_SEARCH_TOP_K,
                  use_ptuning_v2: bool = USE_PTUNING_V2
                  ):
-        self.llm = ChatGLM()
-        self.llm.load_model(model_name_or_path=llm_model_dict[llm_model],
-                            llm_device=llm_device,
-                            use_ptuning_v2=use_ptuning_v2)
+        self.llm = OpenAI()
         self.llm.history_len = llm_history_len
 
-        self.embeddings = HuggingFaceEmbeddings(model_name=embedding_model_dict[embedding_model], )
-        self.embeddings.client = sentence_transformers.SentenceTransformer(self.embeddings.model_name,
-                                                                           device=embedding_device)
+        self.embeddings = OpenAIEmbeddings()
         self.top_k = top_k
 
     def init_knowledge_vector_store(self,
@@ -109,8 +108,8 @@ class LocalDocQA:
                                    query,
                                    vs_path,
                                    chat_history=[], ):
-        prompt_template = """基于以下已知信息，简洁和专业的来回答用户的问题。
-    如果无法从中得到答案，请说 "根据已知信息无法回答该问题" 或 "没有提供足够的相关信息"，不允许在答案中添加编造成分，答案请使用中文。
+        prompt_template = """基于以下已知信息回答问题。
+    如果无法从中得到答案，请说 "根据已知信息无法回答该问题"，不允许在答案中添加编造成分。
     
     已知内容:
     {context}
@@ -122,10 +121,10 @@ class LocalDocQA:
             input_variables=["context", "question"]
         )
         self.llm.history = chat_history
-        vector_store = FAISS.load_local(vs_path, self.embeddings)
+        retriever = ChatGPTPluginRetriever(url="http://127.0.0.1:8000", bearer_token="foo")
         knowledge_chain = RetrievalQA.from_llm(
             llm=self.llm,
-            retriever=vector_store.as_retriever(search_kwargs={"k": self.top_k}),
+            retriever=retriever,
             prompt=prompt
         )
         knowledge_chain.combine_documents_chain.document_prompt = PromptTemplate(

@@ -1,7 +1,5 @@
 from configs.model_config import *
 from chains.local_doc_qa import LocalDocQA
-import os
-import nltk
 
 import uvicorn
 from fastapi import FastAPI, File, UploadFile
@@ -12,7 +10,6 @@ app = FastAPI()
 
 global local_doc_qa, vs_path
 
-nltk.data.path = [os.path.join(os.path.dirname(__file__), "nltk_data")] + nltk.data.path
 
 # return top-k text chunk from vector store
 VECTOR_SEARCH_TOP_K = 10

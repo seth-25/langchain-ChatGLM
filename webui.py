@@ -30,7 +30,7 @@ local_doc_qa = LocalDocQA()
 
 
 def get_answer(query, vs_path, history, mode):
-    if vs_path and mode == "知识库问答":
+    if mode == "知识库问答":
         resp, history = local_doc_qa.get_knowledge_based_answer(
             query=query, vs_path=vs_path, chat_history=history)
         source = "".join([f"""<details> <summary>出处 {i + 1}</summary>
