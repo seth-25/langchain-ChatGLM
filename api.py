@@ -88,8 +88,8 @@ def get_doc_path(local_doc_id: str):
     return os.path.join(get_kb_path(local_doc_id), "content")
 
 
-def get_vs_path(local_doc_id: str):
-    return os.path.join(get_kb_path(local_doc_id), "vector_store")
+# def get_vs_path(local_doc_id: str):
+#     return os.path.join(get_kb_path(local_doc_id), "vector_store")
 
 
 def get_file_path(local_doc_id: str, doc_name: str):
@@ -124,8 +124,8 @@ async def upload_file(
     with open(file_path, "wb") as f:
         f.write(file_content)
 
-    vs_path = get_vs_path(knowledge_base_id)
-    vs_path, loaded_files = local_doc_qa.init_knowledge_vector_store([file_path], vs_path)
+    knowledge_name = knowledge_base_id
+    knowledge_name, loaded_files = local_doc_qa.init_knowledge_vector_store([file_path], knowledge_name)
     if len(loaded_files) > 0:
         file_status = f"文件 {file.filename} 已上传至新的知识库，并已加载知识库，请开始提问。"
         return BaseResponse(code=200, msg=file_status)
@@ -157,28 +157,21 @@ async def upload_files(
             f.write(file_content)
         filelist.append(file_path)
     if filelist:
-        vs_path = get_vs_path(knowledge_base_id)
-        vs_path, loaded_files = local_doc_qa.init_knowledge_vector_store(filelist, vs_path)
+        knowledge_name = knowledge_base_id
+        knowledge_name, loaded_files = local_doc_qa.init_knowledge_vector_store(filelist, knowledge_name)
         if len(loaded_files):
             file_status = f"documents {', '.join([os.path.split(i)[-1] for i in loaded_files])} upload success"
             return BaseResponse(code=200, msg=file_status)
-    file_status = f"documents {', '.join([os.path.split(i)[-1] for i in loaded_files])} upload fail"
-    return BaseResponse(code=500, msg=file_status)
-
+        file_status = f"documents {', '.join([os.path.split(i)[-1] for i in loaded_files])} upload fail"
+        return BaseResponse(code=500, msg=file_status)
+    else:
+        file_status = f"所有文件均已存在。"
+        return BaseResponse(code=200, msg=file_status)
 
 async def list_kbs():
     # Get List of Knowledge Base
-    if not os.path.exists(KB_ROOT_PATH):
-        all_doc_ids = []
-    else:
-        all_doc_ids = [
-            folder
-            for folder in os.listdir(KB_ROOT_PATH)
-            if os.path.isdir(os.path.join(KB_ROOT_PATH, folder))
-               and os.path.exists(os.path.join(KB_ROOT_PATH, folder, "vector_store", "index.faiss"))
-        ]
-
-    return ListDocsResponse(data=all_doc_ids)
+    all_knowledge_name = local_doc_qa.get_knowledge_list()
+    return ListDocsResponse(data=all_knowledge_name)
 
 
 async def list_docs(
@@ -187,19 +180,10 @@ async def list_docs(
     if not validate_kb_name(knowledge_base_id):
         return ListDocsResponse(code=403, msg="Don't attack me", data=[])
 
-    knowledge_base_id = urllib.parse.unquote(knowledge_base_id)
-    kb_path = get_kb_path(knowledge_base_id)
-    local_doc_folder = get_doc_path(knowledge_base_id)
-    if not os.path.exists(kb_path):
+    if not local_doc_qa.check_knowledge_in_collections(knowledge_base_id):
         return ListDocsResponse(code=404, msg=f"Knowledge base {knowledge_base_id} not found", data=[])
-    if not os.path.exists(local_doc_folder):
-        all_doc_names = []
-    else:
-        all_doc_names = [
-            doc
-            for doc in os.listdir(local_doc_folder)
-            if os.path.isfile(os.path.join(local_doc_folder, doc))
-        ]
+
+    all_doc_names = local_doc_qa.list_file_from_vector_store(knowledge_base_id)
     return ListDocsResponse(data=all_doc_names)
 
 
@@ -211,12 +195,12 @@ async def delete_kb(
     if not validate_kb_name(knowledge_base_id):
         return BaseResponse(code=403, msg="Don't attack me")
 
-    # TODO: 确认是否支持批量删除知识库
-    knowledge_base_id = urllib.parse.unquote(knowledge_base_id)
-    kb_path = get_kb_path(knowledge_base_id)
-    if not os.path.exists(kb_path):
+    if not local_doc_qa.check_knowledge_in_collections(knowledge_base_id):
         return BaseResponse(code=404, msg=f"Knowledge base {knowledge_base_id} not found")
+
+    kb_path = get_kb_path(knowledge_base_id)
     shutil.rmtree(kb_path)
+    local_doc_qa.delete_knowledge(knowledge_base_id)
     return BaseResponse(code=200, msg=f"Knowledge Base {knowledge_base_id} delete success")
 
 
@@ -231,8 +215,7 @@ async def delete_doc(
     if not validate_kb_name(knowledge_base_id):
         return BaseResponse(code=403, msg="Don't attack me")
 
-    knowledge_base_id = urllib.parse.unquote(knowledge_base_id)
-    if not os.path.exists(get_kb_path(knowledge_base_id)):
+    if not local_doc_qa.check_knowledge_in_collections(knowledge_base_id):
         return BaseResponse(code=404, msg=f"Knowledge base {knowledge_base_id} not found")
     doc_path = get_file_path(knowledge_base_id, doc_name)
     if os.path.exists(doc_path):
@@ -240,9 +223,10 @@ async def delete_doc(
         remain_docs = await list_docs(knowledge_base_id)
         if len(remain_docs.data) == 0:
             shutil.rmtree(get_kb_path(knowledge_base_id), ignore_errors=True)
+            local_doc_qa.delete_knowledge(knowledge_base_id)
             return BaseResponse(code=200, msg=f"document {doc_name} delete success")
         else:
-            status = local_doc_qa.delete_file_from_vector_store(doc_path, get_vs_path(knowledge_base_id))
+            status = local_doc_qa.delete_file_from_vector_store(doc_path, knowledge_base_id)
             if "success" in status:
                 return BaseResponse(code=200, msg=f"document {doc_name} delete success")
             else:
@@ -263,15 +247,14 @@ async def update_doc(
     if not validate_kb_name(knowledge_base_id):
         return BaseResponse(code=403, msg="Don't attack me")
 
-    knowledge_base_id = urllib.parse.unquote(knowledge_base_id)
-    if not os.path.exists(get_kb_path(knowledge_base_id)):
+    if not local_doc_qa.check_knowledge_in_collections(knowledge_base_id):
         return BaseResponse(code=404, msg=f"Knowledge base {knowledge_base_id} not found")
     doc_path = get_file_path(knowledge_base_id, old_doc)
     if not os.path.exists(doc_path):
         return BaseResponse(code=404, msg=f"document {old_doc} not found")
     else:
         os.remove(doc_path)
-        delete_status = local_doc_qa.delete_file_from_vector_store(doc_path, get_vs_path(knowledge_base_id))
+        delete_status = local_doc_qa.delete_file_from_vector_store(doc_path, knowledge_base_id)
         if "fail" in delete_status:
             return BaseResponse(code=500, msg=f"document {old_doc} delete failed")
         else:
@@ -289,8 +272,7 @@ async def update_doc(
             with open(file_path, "wb") as f:
                 f.write(file_content)
 
-            vs_path = get_vs_path(knowledge_base_id)
-            vs_path, loaded_files = local_doc_qa.init_knowledge_vector_store([file_path], vs_path)
+            knowledge_name, loaded_files = local_doc_qa.init_knowledge_vector_store([file_path], knowledge_base_id)
             if len(loaded_files) > 0:
                 file_status = f"document {old_doc} delete and document {new_doc.filename} upload success"
                 return BaseResponse(code=200, msg=file_status)
@@ -314,8 +296,7 @@ async def local_doc_chat(
             ],
         ),
 ):
-    vs_path = get_vs_path(knowledge_base_id)
-    if not os.path.exists(vs_path):
+    if not local_doc_qa.check_knowledge_in_collections(knowledge_base_id):
         # return BaseResponse(code=404, msg=f"Knowledge base {knowledge_base_id} not found")
         return ChatMessage(
             question=question,
@@ -325,7 +306,7 @@ async def local_doc_chat(
         )
     else:
         for resp, history in local_doc_qa.get_knowledge_based_answer(
-                query=question, vs_path=vs_path, chat_history=history, streaming=True
+                query=question, knowledge_name=knowledge_base_id, chat_history=history, streaming=True
         ):
             pass
         source_documents = [
@@ -408,9 +389,8 @@ async def stream_chat(websocket: WebSocket):
         input_json = await websocket.receive_json()
         question, history, knowledge_base_id = input_json["question"], input_json["history"], input_json[
             "knowledge_base_id"]
-        vs_path = get_vs_path(knowledge_base_id)
 
-        if not os.path.exists(vs_path):
+        if not local_doc_qa.check_knowledge_in_collections(knowledge_base_id):
             await websocket.send_json({"error": f"Knowledge base {knowledge_base_id} not found"})
             await websocket.close()
             return
@@ -419,7 +399,7 @@ async def stream_chat(websocket: WebSocket):
 
         last_print_len = 0
         for resp, history in local_doc_qa.get_knowledge_based_answer(
-                query=question, vs_path=vs_path, chat_history=history, streaming=True
+                query=question, knowledge_name=knowledge_base_id, chat_history=history, streaming=True
         ):
             await asyncio.sleep(0)
             await websocket.send_text(resp["result"][last_print_len:])

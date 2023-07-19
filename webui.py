@@ -12,14 +12,14 @@ import os
 nltk.data.path = [NLTK_DATA_PATH] + nltk.data.path
 
 
-def get_vs_list():
+def get_vs_list() -> list[str]:
     lst_default = ["新建知识库"]
-    if not os.path.exists(KB_ROOT_PATH):
-        return lst_default
-    lst = os.listdir(KB_ROOT_PATH)
+
+    lst = local_doc_qa.get_knowledge_list()
     if not lst:
         return lst_default
     lst.sort()
+    # print("list", lst_default + lst)
     return lst_default + lst
 
 
@@ -32,7 +32,7 @@ local_doc_qa = LocalDocQA()
 flag_csv_logger = gr.CSVLogger()
 
 
-def get_answer(query, vs_path, history, mode, score_threshold=VECTOR_SEARCH_SCORE_THRESHOLD,
+def get_answer(query, knowledge_name, history, mode, score_threshold=VECTOR_SEARCH_SCORE_THRESHOLD,
                vector_search_top_k=VECTOR_SEARCH_TOP_K, chunk_conent: bool = True,
                chunk_size=CHUNK_SIZE, streaming: bool = STREAMING):
     if mode == "Bing搜索问答":
@@ -48,10 +48,9 @@ def get_answer(query, vs_path, history, mode, score_threshold=VECTOR_SEARCH_SCOR
                     enumerate(resp["source_documents"])])
             history[-1][-1] += source
             yield history, ""
-    elif mode == "知识库问答" and vs_path is not None and os.path.exists(vs_path) and "index.faiss" in os.listdir(
-            vs_path):
+    elif mode == "知识库问答" and local_doc_qa.check_knowledge_in_collections(knowledge_name):
         for resp, history in local_doc_qa.get_knowledge_based_answer(
-                query=query, vs_path=vs_path, chat_history=history, streaming=streaming):
+                query=query, knowledge_name=knowledge_name, chat_history=history, streaming=streaming):
             source = "\n\n"
             source += "".join(
                 [f"""<details> <summary>出处 [{i + 1}] {os.path.split(doc.metadata["source"])[-1]}</summary>\n"""
@@ -62,8 +61,8 @@ def get_answer(query, vs_path, history, mode, score_threshold=VECTOR_SEARCH_SCOR
             history[-1][-1] += source
             yield history, ""
     elif mode == "知识库测试":
-        if os.path.exists(vs_path):
-            resp, prompt = local_doc_qa.get_knowledge_based_conent_test(query=query, vs_path=vs_path,
+        if local_doc_qa.check_knowledge_in_collections(knowledge_name):
+            resp, prompt = local_doc_qa.get_knowledge_based_conent_test(query=query, knowledge_name=knowledge_name,
                                                                         score_threshold=score_threshold,
                                                                         vector_search_top_k=vector_search_top_k,
                                                                         chunk_conent=chunk_conent,
@@ -94,8 +93,9 @@ def get_answer(query, vs_path, history, mode, score_threshold=VECTOR_SEARCH_SCOR
             history = answer_result.history
             history[-1][-1] = resp
             yield history, ""
-    logger.info(f"flagging: username={FLAG_USER_NAME},query={query},vs_path={vs_path},mode={mode},history={history}")
-    flag_csv_logger.flag([query, vs_path, history, mode], username=FLAG_USER_NAME)
+    logger.info(
+        f"flagging: username={FLAG_USER_NAME},query={query},knowledge_name={knowledge_name},mode={mode},history={history}")
+    flag_csv_logger.flag([query, knowledge_name, history, mode], username=FLAG_USER_NAME)
 
 
 def init_model():
@@ -142,18 +142,18 @@ def reinit_model(llm_model, embedding_model, llm_history_len, no_remote_model, u
     return history + [[None, model_status]]
 
 
-def get_vector_store(vs_id, files, sentence_size, history, one_conent, one_content_segmentation):
-    vs_path = os.path.join(KB_ROOT_PATH, vs_id, "vector_store")
+def get_vector_store(knowledge_name, files, sentence_size, history, one_conent, one_content_segmentation):
     filelist = []
     if local_doc_qa.llm_model_chain and local_doc_qa.embeddings:
+        # print("files", files, type(files))
         if isinstance(files, list):
             for file in files:
                 filename = os.path.split(file.name)[-1]
-                shutil.move(file.name, os.path.join(KB_ROOT_PATH, vs_id, "content", filename))
-                filelist.append(os.path.join(KB_ROOT_PATH, vs_id, "content", filename))
-            vs_path, loaded_files = local_doc_qa.init_knowledge_vector_store(filelist, vs_path, sentence_size)
+                shutil.move(file.name, os.path.join(KB_ROOT_PATH, knowledge_name, "content", filename))
+                filelist.append(os.path.join(KB_ROOT_PATH, knowledge_name, "content", filename))
+            knowledge_name, loaded_files = local_doc_qa.init_knowledge_vector_store(filelist, knowledge_name, sentence_size)
         else:
-            vs_path, loaded_files = local_doc_qa.one_knowledge_add(vs_path, files, one_conent, one_content_segmentation,
+            knowledge_name, loaded_files = local_doc_qa.one_knowledge_add(knowledge_name, files, one_conent, one_content_segmentation,
                                                                    sentence_size)
         if len(loaded_files):
             file_status = f"已添加 {'、'.join([os.path.split(i)[-1] for i in loaded_files if i])} 内容至知识库，并已加载知识库，请开始提问"
@@ -161,28 +161,28 @@ def get_vector_store(vs_id, files, sentence_size, history, one_conent, one_conte
             file_status = "文件未成功加载，请重新上传文件"
     else:
         file_status = "模型未完成加载，请先在加载模型后再导入文件"
-        vs_path = None
+        knowledge_name = None
     logger.info(file_status)
-    return vs_path, None, history + [[None, file_status]], \
-           gr.update(choices=local_doc_qa.list_file_from_vector_store(vs_path) if vs_path else [])
+    return knowledge_name, None, history + [[None, file_status]], \
+           gr.update(choices=local_doc_qa.list_file_from_vector_store(knowledge_name) if knowledge_name else [])
 
 
-def change_vs_name_input(vs_id, history):
-    if vs_id == "新建知识库":
+def change_vs_name_input(knowledge_name, history):
+    # print("change_vs_name_input", knowledge_name, type(knowledge_name))
+    if knowledge_name == "新建知识库":
         return gr.update(visible=True), gr.update(visible=True), gr.update(visible=False), None, history, \
                gr.update(choices=[]), gr.update(visible=False)
     else:
-        vs_path = os.path.join(KB_ROOT_PATH, vs_id, "vector_store")
-        if "index.faiss" in os.listdir(vs_path):
-            file_status = f"已加载知识库{vs_id}，请开始提问"
+        if local_doc_qa.check_knowledge_in_collections(knowledge_name):
+            file_status = f"已加载知识库{knowledge_name}，请开始提问"
             return gr.update(visible=False), gr.update(visible=False), gr.update(visible=True), \
-                   vs_path, history + [[None, file_status]], \
-                   gr.update(choices=local_doc_qa.list_file_from_vector_store(vs_path), value=[]), \
+                   knowledge_name, history + [[None, file_status]], \
+                   gr.update(choices=local_doc_qa.list_file_from_vector_store(knowledge_name), value=[]), \
                    gr.update(visible=True)
         else:
-            file_status = f"已选择知识库{vs_id}，当前知识库中未上传文件，请先上传文件后，再开始提问"
+            file_status = f"已选择知识库{knowledge_name}，当前知识库中未上传文件，请先上传文件后，再开始提问"
             return gr.update(visible=False), gr.update(visible=False), gr.update(visible=True), \
-                   vs_path, history + [[None, file_status]], \
+                   knowledge_name, history + [[None, file_status]], \
                    gr.update(choices=[], value=[]), gr.update(visible=True, value=[])
 
 
@@ -221,40 +221,40 @@ def change_chunk_conent(mode, label_conent, history):
         return gr.update(visible=False), history + [[None, f"【已关闭{conent}】"]]
 
 
-def add_vs_name(vs_name, chatbot):
-    if vs_name is None or vs_name.strip() == "":
+def add_vs_name(knowledge_name, chatbot):
+    if knowledge_name is None or knowledge_name.strip() == "":
         vs_status = "知识库名称不能为空，请重新填写知识库名称"
         chatbot = chatbot + [[None, vs_status]]
         return gr.update(visible=True), gr.update(visible=True), gr.update(visible=True), gr.update(
             visible=False), chatbot, gr.update(visible=False)
-    elif vs_name in get_vs_list():
+    elif knowledge_name in get_vs_list():
         vs_status = "与已有知识库名称冲突，请重新选择其他名称后提交"
         chatbot = chatbot + [[None, vs_status]]
         return gr.update(visible=True), gr.update(visible=True), gr.update(visible=True), gr.update(
             visible=False), chatbot, gr.update(visible=False)
     else:
         # 新建上传文件存储路径
-        if not os.path.exists(os.path.join(KB_ROOT_PATH, vs_name, "content")):
-            os.makedirs(os.path.join(KB_ROOT_PATH, vs_name, "content"))
+        if not os.path.exists(os.path.join(KB_ROOT_PATH, knowledge_name, "content")):
+            os.makedirs(os.path.join(KB_ROOT_PATH, knowledge_name, "content"))
         # 新建向量库存储路径
-        if not os.path.exists(os.path.join(KB_ROOT_PATH, vs_name, "vector_store")):
-            os.makedirs(os.path.join(KB_ROOT_PATH, vs_name, "vector_store"))
-        vs_status = f"""已新增知识库"{vs_name}",将在上传文件并载入成功后进行存储。请在开始对话前，先完成文件上传。 """
+        if not os.path.exists(os.path.join(KB_ROOT_PATH, knowledge_name, "vector_store")):
+            os.makedirs(os.path.join(KB_ROOT_PATH, knowledge_name, "vector_store"))
+        vs_status = f"""已新增知识库"{knowledge_name}",将在上传文件并载入成功后进行存储。请在开始对话前，先完成文件上传。 """
         chatbot = chatbot + [[None, vs_status]]
-        return gr.update(visible=True, choices=get_vs_list(), value=vs_name), gr.update(
+        return gr.update(visible=True, choices=get_vs_list(), value=knowledge_name), gr.update(
             visible=False), gr.update(visible=False), gr.update(visible=True), chatbot, gr.update(visible=True)
 
 
 # 自动化加载固定文件间中文件
-def reinit_vector_store(vs_id, history):
+def reinit_vector_store(knowledge_name, history):
     try:
-        shutil.rmtree(os.path.join(KB_ROOT_PATH, vs_id, "vector_store"))
-        vs_path = os.path.join(KB_ROOT_PATH, vs_id, "vector_store")
+        # shutil.rmtree(os.path.join(KB_ROOT_PATH, knowledge_name, "vector_store"))
+        # vs_path = os.path.join(KB_ROOT_PATH, knowledge_name, "vector_store")
         sentence_size = gr.Number(value=SENTENCE_SIZE, precision=0,
                                   label="文本入库分句长度限制",
                                   interactive=True, visible=True)
-        vs_path, loaded_files = local_doc_qa.init_knowledge_vector_store(os.path.join(KB_ROOT_PATH, vs_id, "content"),
-                                                                         vs_path, sentence_size)
+        knowledge_name, loaded_files = local_doc_qa.init_knowledge_vector_store(os.path.join(KB_ROOT_PATH, knowledge_name, "content"),
+                                                                         knowledge_name, sentence_size, pre_delete_knowledge=True)
         model_status = """知识库构建成功"""
     except Exception as e:
         logger.error(e)
@@ -264,35 +264,36 @@ def reinit_vector_store(vs_id, history):
 
 
 def refresh_vs_list():
+    # print("start refresh", gr.update(choices=get_vs_list()), gr.update(choices=get_vs_list()))
     return gr.update(choices=get_vs_list()), gr.update(choices=get_vs_list())
 
 
-def delete_file(vs_id, files_to_delete, chatbot):
-    vs_path = os.path.join(KB_ROOT_PATH, vs_id, "vector_store")
-    content_path = os.path.join(KB_ROOT_PATH, vs_id, "content")
+def delete_file(knowledge_name, files_to_delete, chatbot):
+    content_path = os.path.join(KB_ROOT_PATH, knowledge_name, "content")
     docs_path = [os.path.join(content_path, file) for file in files_to_delete]
-    status = local_doc_qa.delete_file_from_vector_store(vs_path=vs_path,
+    status = local_doc_qa.delete_file_from_vector_store(knowledge_name=knowledge_name,
                                                         filepath=docs_path)
     if "fail" not in status:
         for doc_path in docs_path:
             if os.path.exists(doc_path):
                 os.remove(doc_path)
-    rested_files = local_doc_qa.list_file_from_vector_store(vs_path)
+    rested_files = local_doc_qa.list_file_from_vector_store(knowledge_name)
     if "fail" in status:
         vs_status = "文件删除失败。"
     elif len(rested_files) > 0:
         vs_status = "文件删除成功。"
     else:
-        vs_status = f"文件删除成功，知识库{vs_id}中无已上传文件，请先上传文件后，再开始提问。"
+        vs_status = f"文件删除成功，知识库{knowledge_name}中无已上传文件，请先上传文件后，再开始提问。"
     logger.info(",".join(files_to_delete) + vs_status)
     chatbot = chatbot + [[None, vs_status]]
-    return gr.update(choices=local_doc_qa.list_file_from_vector_store(vs_path), value=[]), chatbot
+    return gr.update(choices=local_doc_qa.list_file_from_vector_store(knowledge_name), value=[]), chatbot
 
 
-def delete_vs(vs_id, chatbot):
+def delete_vs(knowledge_name, chatbot):
     try:
-        shutil.rmtree(os.path.join(KB_ROOT_PATH, vs_id))
-        status = f"成功删除知识库{vs_id}"
+        shutil.rmtree(os.path.join(KB_ROOT_PATH, knowledge_name))
+        local_doc_qa.delete_knowledge(knowledge_name)
+        status = f"成功删除知识库{knowledge_name}"
         logger.info(status)
         chatbot = chatbot + [[None, status]]
         return gr.update(choices=get_vs_list(), value=get_vs_list()[0]), gr.update(visible=True), gr.update(
@@ -300,7 +301,7 @@ def delete_vs(vs_id, chatbot):
                gr.update(visible=False), chatbot, gr.update(visible=False)
     except Exception as e:
         logger.error(e)
-        status = f"删除知识库{vs_id}失败"
+        status = f"删除知识库{knowledge_name}失败"
         chatbot = chatbot + [[None, status]]
         return gr.update(visible=True), gr.update(visible=False), gr.update(visible=False), \
                gr.update(visible=True), chatbot, gr.update(visible=True)
@@ -338,7 +339,7 @@ default_theme_args = dict(
 )
 
 with gr.Blocks(css=block_css, theme=gr.themes.Default(**default_theme_args)) as demo:
-    vs_path, file_status, model_status = gr.State(
+    knowledge_name, file_status, model_status = gr.State(
         os.path.join(KB_ROOT_PATH, get_vs_list()[0], "vector_store") if len(get_vs_list()) > 1 else ""), gr.State(
         ""), gr.State(
         model_status)
@@ -407,19 +408,19 @@ with gr.Blocks(css=block_css, theme=gr.themes.Default(**default_theme_args)) as 
                                     outputs=[select_vs, vs_name, vs_add, file2vs, chatbot, vs_delete])
                     select_vs.change(fn=change_vs_name_input,
                                      inputs=[select_vs, chatbot],
-                                     outputs=[vs_name, vs_add, file2vs, vs_path, chatbot, files_to_delete, vs_delete])
+                                     outputs=[vs_name, vs_add, file2vs, knowledge_name, chatbot, files_to_delete, vs_delete])
                     load_file_button.click(get_vector_store,
                                            show_progress=True,
                                            inputs=[select_vs, files, sentence_size, chatbot, vs_add, vs_add],
-                                           outputs=[vs_path, files, chatbot, files_to_delete], )
+                                           outputs=[knowledge_name, files, chatbot, files_to_delete], )
                     load_folder_button.click(get_vector_store,
                                              show_progress=True,
                                              inputs=[select_vs, folder_files, sentence_size, chatbot, vs_add,
                                                      vs_add],
-                                             outputs=[vs_path, folder_files, chatbot, files_to_delete], )
-                    flag_csv_logger.setup([query, vs_path, chatbot, mode], "flagged")
+                                             outputs=[knowledge_name, folder_files, chatbot, files_to_delete], )
+                    flag_csv_logger.setup([query, knowledge_name, chatbot, mode], "flagged")
                     query.submit(get_answer,
-                                 [query, vs_path, chatbot, mode],
+                                 [query, knowledge_name, chatbot, mode],
                                  [chatbot, query])
                     delete_file_button.click(delete_file,
                                              show_progress=True,
@@ -505,24 +506,24 @@ with gr.Blocks(css=block_css, theme=gr.themes.Default(**default_theme_args)) as 
                                  outputs=[select_vs_test, vs_name, vs_add, file2vs, chatbot])
                     select_vs_test.change(fn=change_vs_name_input,
                                           inputs=[select_vs_test, chatbot],
-                                          outputs=[vs_name, vs_add, file2vs, vs_path, chatbot])
+                                          outputs=[vs_name, vs_add, file2vs, knowledge_name, chatbot])
                     load_file_button.click(get_vector_store,
                                            show_progress=True,
                                            inputs=[select_vs_test, files, sentence_size, chatbot, vs_add, vs_add],
-                                           outputs=[vs_path, files, chatbot], )
+                                           outputs=[knowledge_name, files, chatbot], )
                     load_folder_button.click(get_vector_store,
                                              show_progress=True,
                                              inputs=[select_vs_test, folder_files, sentence_size, chatbot, vs_add,
                                                      vs_add],
-                                             outputs=[vs_path, folder_files, chatbot], )
+                                             outputs=[knowledge_name, folder_files, chatbot], )
                     load_conent_button.click(get_vector_store,
                                              show_progress=True,
                                              inputs=[select_vs_test, one_title, sentence_size, chatbot,
                                                      one_conent, one_content_segmentation],
-                                             outputs=[vs_path, files, chatbot], )
-                    flag_csv_logger.setup([query, vs_path, chatbot, mode], "flagged")
+                                             outputs=[knowledge_name, files, chatbot], )
+                    flag_csv_logger.setup([query, knowledge_name, chatbot, mode], "flagged")
                     query.submit(get_answer,
-                                 [query, vs_path, chatbot, mode, score_threshold, vector_search_top_k, chunk_conent,
+                                 [query, knowledge_name, chatbot, mode, score_threshold, vector_search_top_k, chunk_conent,
                                   chunk_sizes],
                                  [chatbot, query])
     with gr.Tab("模型配置"):

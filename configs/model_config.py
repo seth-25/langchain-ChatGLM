@@ -9,6 +9,11 @@ logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 logging.basicConfig(format=LOG_FORMAT)
 
+LANGCHAIN_DEFAULT_EMBEDDING_DIM = 1024
+LANGCHAIN_DEFAULT_KNOWLEDGE_NAME = "langchain_document"
+LANGCHAIN_DEFAULT_COLLECTIONS_NAME = "langchain_pg_collection"
+
+
 # 在以下字典中修改属性值，以指定本地embedding模型存储位置
 # 如将 "text2vec": "GanymedeNil/text2vec-large-chinese" 修改为 "text2vec": "User/Downloads/text2vec-large-chinese"
 # 此处请写绝对路径
@@ -186,7 +191,8 @@ llm_model_dict = {
 }
 
 # LLM 名称
-LLM_MODEL = "chatglm-6b"
+LLM_MODEL = "chatglm2-6b"
+# LLM_MODEL = "chatglm2-6b-int4"
 # 量化加载8bit 模型
 LOAD_IN_8BIT = False
 # Load the model with bfloat16 precision. Requires NVIDIA Ampere GPU.

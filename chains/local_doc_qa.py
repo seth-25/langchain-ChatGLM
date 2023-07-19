@@ -1,5 +1,5 @@
 from langchain.embeddings.huggingface import HuggingFaceEmbeddings
-from vectorstores import MyFAISS
+from vectorstores import MyFAISS, AnalyticDB
 from langchain.document_loaders import UnstructuredFileLoader, TextLoader, CSVLoader
 from configs.model_config import *
 import datetime
@@ -28,11 +28,22 @@ def _embeddings_hash(self):
 
 HuggingFaceEmbeddings.__hash__ = _embeddings_hash
 
+CONNECTION_STRING = AnalyticDB.connection_string_from_db_params(
+    driver=os.environ.get("PG_DRIVER", "psycopg2"),
+    host=os.environ.get("PG_HOST", "localhost"),
+    port=int(os.environ.get("PG_PORT", "5432")),
+    database=os.environ.get("PG_DATABASE", "postgres"),
+    user=os.environ.get("PG_USER", "postgres"),
+    password=os.environ.get("PG_PASSWORD", "postgres"),
+)
 
-# will keep CACHED_VS_NUM of vector store caches
-@lru_cache(CACHED_VS_NUM)
-def load_vector_store(vs_path, embeddings):
-    return MyFAISS.load_local(vs_path, embeddings)
+
+def load_vector_store(knowledge_name, embeddings, pre_get_knowledge=True, pre_delete_knowledge=False):
+    if not knowledge_name:
+        raise Exception("知识库名称为空")
+    return AnalyticDB(knowledge_name=knowledge_name, embedding_function=embeddings,
+                      connection_string=CONNECTION_STRING, pre_get_knowledge=pre_get_knowledge,
+                      pre_delete_knowledge=pre_delete_knowledge)
 
 
 def tree(filepath, ignore_dir_names=None, ignore_file_names=None):
@@ -83,7 +94,7 @@ def load_file(filepath, sentence_size=SENTENCE_SIZE, using_zh_title_enhance=ZH_T
         docs = loader.load_and_split(text_splitter=textsplitter)
     if using_zh_title_enhance:
         docs = zh_title_enhance(docs)
-    write_check_file(filepath, docs)
+    # write_check_file(filepath, docs)
     return docs
 
 
@@ -140,8 +151,9 @@ class LocalDocQA:
 
     def init_knowledge_vector_store(self,
                                     filepath: str or List[str],
-                                    vs_path: str or os.PathLike = None,
-                                    sentence_size=SENTENCE_SIZE):
+                                    knowledge_name: str or os.PathLike = None,
+                                    sentence_size=SENTENCE_SIZE,
+                                    pre_delete_knowledge=False):
         loaded_files = []
         failed_files = []
         if isinstance(filepath, str):
@@ -185,48 +197,40 @@ class LocalDocQA:
                     logger.info(f"{file} 未能成功加载")
         if len(docs) > 0:
             logger.info("文件加载完毕，正在生成向量库")
-            if vs_path and os.path.isdir(vs_path) and "index.faiss" in os.listdir(vs_path):
-                vector_store = load_vector_store(vs_path, self.embeddings)
-                vector_store.add_documents(docs)
-                torch_gc()
-            else:
-                if not vs_path:
-                    vs_path = os.path.join(KB_ROOT_PATH,
-                                           f"""{"".join(lazy_pinyin(os.path.splitext(file)[0]))}_FAISS_{datetime.datetime.now().strftime("%Y%m%d_%H%M%S")}""",
-                                           "vector_store")
-                vector_store = MyFAISS.from_documents(docs, self.embeddings)  # docs 为Document列表
-                torch_gc()
-
-            vector_store.save_local(vs_path)
-            return vs_path, loaded_files
+            if not knowledge_name:
+                knowledge_name = LANGCHAIN_DEFAULT_KNOWLEDGE_NAME
+            vector_store = load_vector_store(knowledge_name, self.embeddings, pre_delete_knowledge=pre_delete_knowledge)
+            vector_store.add_documents(docs)  # docs 为Document列表
+            torch_gc()
+            return knowledge_name, loaded_files
         else:
             logger.info("文件均未成功加载，请检查依赖包或替换为其他文件再次上传。")
 
             return None, loaded_files
 
-    def one_knowledge_add(self, vs_path, one_title, one_conent, one_content_segmentation, sentence_size):
+    def one_knowledge_add(self, knowledge_name, one_title, one_conent, one_content_segmentation, sentence_size):
         try:
-            if not vs_path or not one_title or not one_conent:
+            if not knowledge_name or not one_title or not one_conent:
                 logger.info("知识库添加错误，请确认知识库名字、标题、内容是否正确！")
                 return None, [one_title]
             docs = [Document(page_content=one_conent + "\n", metadata={"source": one_title})]
             if not one_content_segmentation:
                 text_splitter = ChineseTextSplitter(pdf=False, sentence_size=sentence_size)
                 docs = text_splitter.split_documents(docs)
-            if os.path.isdir(vs_path) and os.path.isfile(vs_path + "/index.faiss"):
-                vector_store = load_vector_store(vs_path, self.embeddings)
-                vector_store.add_documents(docs)
-            else:
-                vector_store = MyFAISS.from_documents(docs, self.embeddings)  ##docs 为Document列表
+
+            vector_store = load_vector_store(knowledge_name, self.embeddings)
+            vector_store.add_documents(docs)  # docs 为Document列表
             torch_gc()
-            vector_store.save_local(vs_path)
-            return vs_path, [one_title]
+            return knowledge_name, [one_title]
         except Exception as e:
             logger.error(e)
             return None, [one_title]
 
-    def get_knowledge_based_answer(self, query, vs_path, chat_history=[], streaming: bool = STREAMING):
-        vector_store = load_vector_store(vs_path, self.embeddings)
+    def get_knowledge_based_answer(self, query, knowledge_name, chat_history=[], streaming: bool = STREAMING):
+        if not knowledge_name:
+            logger.error("知识库名称错误")
+            return None
+        vector_store = load_vector_store(knowledge_name, self.embeddings)
         vector_store.chunk_size = self.chunk_size
         vector_store.chunk_conent = self.chunk_conent
         vector_store.score_threshold = self.score_threshold
@@ -255,11 +259,13 @@ class LocalDocQA:
     # score_threshold    搜索匹配score阈值
     # vector_search_top_k   搜索知识库内容条数，默认搜索5条结果
     # chunk_sizes    匹配单段内容的连接上下文长度
-    def get_knowledge_based_conent_test(self, query, vs_path, chunk_conent,
+    def get_knowledge_based_conent_test(self, query, knowledge_name, chunk_conent,
                                         score_threshold=VECTOR_SEARCH_SCORE_THRESHOLD,
                                         vector_search_top_k=VECTOR_SEARCH_TOP_K, chunk_size=CHUNK_SIZE):
-        vector_store = load_vector_store(vs_path, self.embeddings)
-        # FAISS.similarity_search_with_score_by_vector = similarity_search_with_score_by_vector
+        if not knowledge_name:
+            logger.error("知识库名称错误")
+            return None
+        vector_store = load_vector_store(knowledge_name, self.embeddings)
         vector_store.chunk_conent = chunk_conent
         vector_store.score_threshold = score_threshold
         vector_store.chunk_size = chunk_size
@@ -293,57 +299,78 @@ class LocalDocQA:
 
     def delete_file_from_vector_store(self,
                                       filepath: str or List[str],
-                                      vs_path):
-        vector_store = load_vector_store(vs_path, self.embeddings)
+                                      knowledge_name):
+        vector_store = load_vector_store(knowledge_name, self.embeddings)
         status = vector_store.delete_doc(filepath)
         return status
 
     def update_file_from_vector_store(self,
                                       filepath: str or List[str],
-                                      vs_path,
+                                      knowledge_name,
                                       docs: List[Document], ):
-        vector_store = load_vector_store(vs_path, self.embeddings)
+        if not knowledge_name:
+            logger.error("知识库名称错误")
+            return f"docs update fail"
+        vector_store = load_vector_store(knowledge_name, self.embeddings)
         status = vector_store.update_doc(filepath, docs)
         return status
 
     def list_file_from_vector_store(self,
-                                    vs_path,
+                                    knowledge_name,
                                     fullpath=False):
-        vector_store = load_vector_store(vs_path, self.embeddings)
+        if not knowledge_name:
+            logger.error("知识库名称错误")
+            return None
+        vector_store = load_vector_store(knowledge_name, self.embeddings)
         docs = vector_store.list_docs()
         if fullpath:
             return docs
         else:
             return [os.path.split(doc)[-1] for doc in docs]
 
+    def check_knowledge_in_collections(self, knowledge_name):
+        if not knowledge_name:
+            logger.error("知识库名称错误")
+            return None
+        vector_store = load_vector_store(knowledge_name, self.embeddings, pre_get_knowledge=False)
+        return vector_store.check_knowledge_if_exists(knowledge_name)
 
-if __name__ == "__main__":
-    # 初始化消息
-    args = None
-    args = parser.parse_args(args=['--model-dir', '/media/checkpoint/', '--model', 'chatglm-6b', '--no-remote-model'])
+    def get_knowledge_list(self):
+        vector_store = load_vector_store(LANGCHAIN_DEFAULT_KNOWLEDGE_NAME, self.embeddings, pre_get_knowledge=False)
+        return vector_store.get_collections()
 
-    args_dict = vars(args)
-    shared.loaderCheckPoint = LoaderCheckPoint(args_dict)
-    llm_model_ins = shared.loaderLLM()
+    def delete_knowledge(self, knowledge_name):
+        vector_store = load_vector_store(knowledge_name, self.embeddings, pre_get_knowledge=False)
+        return vector_store.delete_knowledge()
 
-    local_doc_qa = LocalDocQA()
-    local_doc_qa.init_cfg(llm_model=llm_model_ins)
-    query = "本项目使用的embedding模型是什么，消耗多少显存"
-    vs_path = "/media/gpt4-pdf-chatbot-langchain/dev-langchain-ChatGLM/vector_store/test"
-    last_print_len = 0
-    # for resp, history in local_doc_qa.get_knowledge_based_answer(query=query,
-    #                                                              vs_path=vs_path,
-    #                                                              chat_history=[],
-    #                                                              streaming=True):
-    for resp, history in local_doc_qa.get_search_result_based_answer(query=query,
-                                                                     chat_history=[],
-                                                                     streaming=True):
-        print(resp["result"][last_print_len:], end="", flush=True)
-        last_print_len = len(resp["result"])
-    source_text = [f"""出处 [{inum + 1}] {doc.metadata['source'] if doc.metadata['source'].startswith("http")
-    else os.path.split(doc.metadata['source'])[-1]}：\n\n{doc.page_content}\n\n"""
-                   # f"""相关度：{doc.metadata['score']}\n\n"""
-                   for inum, doc in
-                   enumerate(resp["source_documents"])]
-    logger.info("\n\n" + "\n\n".join(source_text))
-    pass
+
+# if __name__ == "__main__":
+#     # 初始化消息
+#     args = None
+#     args = parser.parse_args(args=['--model-dir', '/media/checkpoint/', '--model', 'chatglm-6b', '--no-remote-model'])
+#
+#     args_dict = vars(args)
+#     shared.loaderCheckPoint = LoaderCheckPoint(args_dict)
+#     llm_model_ins = shared.loaderLLM()
+#
+#     local_doc_qa = LocalDocQA()
+#     local_doc_qa.init_cfg(llm_model=llm_model_ins)
+#     query = "本项目使用的embedding模型是什么，消耗多少显存"
+#     vs_path = "/media/gpt4-pdf-chatbot-langchain/dev-langchain-ChatGLM/vector_store/test"
+#     last_print_len = 0
+#     # for resp, history in local_doc_qa.get_knowledge_based_answer(query=query,
+#     #                                                              vs_path=vs_path,
+#     #                                                              chat_history=[],
+#     #                                                              streaming=True):
+#     for resp, history in local_doc_qa.get_search_result_based_answer(query=query,
+#                                                                      chat_history=[],
+#                                                                      streaming=True):
+#         print(resp["result"][last_print_len:], end="", flush=True)
+#         last_print_len = len(resp["result"])
+#     source_text = [f"""出处 [{inum + 1}] {doc.metadata['source'] if doc.metadata['source'].startswith("http")
+#     else os.path.split(doc.metadata['source'])[-1]}：\n\n{doc.page_content}\n\n"""
+#                    # f"""相关度：{doc.metadata['score']}\n\n"""
+#                    for inum, doc in
+#                    enumerate(resp["source_documents"])]
+#     logger.info("\n\n" + "\n\n".join(source_text))
+#     pass
