@@ -11,7 +11,7 @@ logging.basicConfig(format=LOG_FORMAT)
 
 LANGCHAIN_DEFAULT_EMBEDDING_DIM = 1024
 LANGCHAIN_DEFAULT_KNOWLEDGE_NAME = "langchain_document"
-LANGCHAIN_DEFAULT_COLLECTIONS_NAME = "langchain_pg_collection"
+LANGCHAIN_DEFAULT_COLLECTIONS_NAME = "langchain_collections"
 
 
 # 在以下字典中修改属性值，以指定本地embedding模型存储位置
