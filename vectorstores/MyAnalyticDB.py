@@ -111,6 +111,7 @@ class MyAnalyticDB(AnalyticDB, VectorStore):
             Column("embedding", ARRAY(REAL)),
             Column("document", String, nullable=True),
             Column("metadata", JSON, nullable=True),
+            Column("source", TEXT, nullable=True),
             extend_existing=True,
         )
 
@@ -209,11 +210,17 @@ class MyAnalyticDB(AnalyticDB, VectorStore):
         if not metadatas:
             metadatas = [{} for _ in texts]
 
+        # 导入的文件metadata必须要有source，才可以显示和删除
+        try:
+            sources = [metadata["source"] for metadata in metadatas]
+        except KeyError:
+            raise KeyError("导入的文本没有source，请检查load_file")
+
         chunks_table_data = []
         with self.engine.connect() as conn:
             with conn.begin():
-                for document, metadata, chunk_id, embedding in zip(
-                        texts, metadatas, ids, embeddings
+                for document, metadata, chunk_id, embedding, source in zip(
+                        texts, metadatas, ids, embeddings, sources
                 ):
                     chunks_table_data.append(
                         {
@@ -221,6 +228,7 @@ class MyAnalyticDB(AnalyticDB, VectorStore):
                             "embedding": embedding,
                             "document": document,
                             "metadata": metadata,
+                            "source": source,
                         }
                     )
 
@@ -261,7 +269,7 @@ class MyAnalyticDB(AnalyticDB, VectorStore):
         for result in results:
             if 0 < self.score_threshold < result[1]:
                 continue
-            result[0].metadata["score"] = int(result[1]) if self.embedding_function is not None else None
+            result[0].metadata["score"] = round(result[1], 3) if self.embedding_function is not None else None
             documents.append(result[0])
         return documents
 
@@ -426,7 +434,7 @@ class MyAnalyticDB(AnalyticDB, VectorStore):
             if not isinstance(doc, Document):
                 raise ValueError(f"Could not find document, got {doc}")
 
-            doc.metadata["score"] = doc_score
+            doc.metadata["score"] = round(doc_score, 3)
             docs.append(doc)
         return docs
 
@@ -437,12 +445,14 @@ class MyAnalyticDB(AnalyticDB, VectorStore):
             with self.engine.connect() as conn:
                 with conn.begin():
                     if isinstance(source, str):
-                        select_condition = self.collection_table.c.metadata.op("->>")("source") == source
+                        select_condition = self.collection_table.c.source == source
+                        # select_condition = self.collection_table.c.metadata.op("->>")("source") == source
                         s = select(self.collection_table.c.id).where(select_condition)
                         result = conn.execute(s).fetchall()
                     else:
                         for src in source:
-                            select_condition = self.collection_table.c.metadata.op("->>")("source") == src
+                            select_condition = self.collection_table.c.source == src
+                            # select_condition = self.collection_table.c.metadata.op("->>")("source") == src
                             s = select(self.collection_table.c.id).where(select_condition)
                             result.extend(conn.execute(s).fetchall())
 
@@ -470,6 +480,6 @@ class MyAnalyticDB(AnalyticDB, VectorStore):
     def list_docs(self):
         with self.engine.connect() as conn:
             with conn.begin():
-                s = select(self.collection_table.c.metadata["source"])
-                result = conn.execute(s).fetchall()
-        return list(set(v[0] for v in result))
+                s = select(self.collection_table.c.source).group_by(self.collection_table.c.source)
+                results = conn.execute(s).fetchall()
+        return list(result[0] for result in results)

@@ -101,10 +101,10 @@ def load_file(filepath, sentence_size=SENTENCE_SIZE, using_zh_title_enhance=ZH_T
         docs = zh_title_enhance(docs)
     # write_check_file(filepath, docs)
 
-    print("doc ===========================")
-    for doc in docs:
-        print(doc)
-    print("doc ===========================")
+    # print("doc ===========================")
+    # for doc in docs:
+    #     print(doc)
+    # print("doc ===========================")
     return docs
 
 
@@ -122,7 +122,7 @@ def write_check_file(filepath, docs):
         fout.close()
 
 
-def generate_prompt(related_docs: List[str],
+def generate_prompt(related_docs: List[Document],
                     query: str,
                     prompt_template: str = PROMPT_TEMPLATE, ) -> str:
     context = "\n".join([doc.page_content for doc in related_docs])
@@ -336,7 +336,7 @@ class LocalDocQA:
         if not knowledge_name:
             logger.error("知识库名称错误")
             return None
-        vector_store = load_vector_store(knowledge_name, self.embeddings)
+        vector_store = load_vector_store(knowledge_name, self.embeddings, pre_get_knowledge=True)
         docs = vector_store.list_docs()
         if fullpath:
             return docs
@@ -348,11 +348,13 @@ class LocalDocQA:
         if not knowledge_name:
             logger.error("知识库名称错误")
             return None
+        # 检查langchain_collections即可，不需要获取knowledge_name的表
         vector_store = load_vector_store(knowledge_name, self.embeddings, pre_get_knowledge=False)
         return vector_store.check_collection_if_exists(knowledge_name)
 
     def get_knowledge_list(self):
         print("获取knowledge列表")
+        # 获取langchain_collections里所有的表即可，不需要获取knowledge_name的表
         vector_store = load_vector_store(LANGCHAIN_DEFAULT_KNOWLEDGE_NAME, self.embeddings, pre_get_knowledge=False)
         return vector_store.get_collections()
 

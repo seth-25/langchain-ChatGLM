@@ -21,7 +21,6 @@ md_headers = [
 ]
 
 
-
 def md_title_enhance(docs: List[Document]) -> List[Document]:
     if len(docs) > 0:
         for doc in docs:
