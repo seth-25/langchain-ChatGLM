@@ -1,3 +1,4 @@
+from langchain.embeddings.base import Embeddings
 from langchain.embeddings.huggingface import HuggingFaceEmbeddings
 from vectorstores import MyFAISS, MyAnalyticDB
 from langchain.vectorstores.analyticdb import AnalyticDB
@@ -38,12 +39,7 @@ CONNECTION_STRING = AnalyticDB.connection_string_from_db_params(
 )
 
 
-def load_vector_store(knowledge_name, embeddings, pre_get_knowledge=True, pre_delete_knowledge=False):
-    if not knowledge_name:
-        raise Exception("知识库名称为空")
-    return MyAnalyticDB(collection_name=knowledge_name, embedding_function=embeddings,
-                        connection_string=CONNECTION_STRING, pre_get_collection=pre_get_knowledge,
-                        pre_delete_collection=pre_delete_knowledge)
+
 
 
 def tree(filepath, ignore_dir_names=None, ignore_file_names=None):
@@ -148,6 +144,16 @@ class LocalDocQA:
     chunk_conent: bool = True
     score_threshold: int = VECTOR_SEARCH_SCORE_THRESHOLD
 
+    def __init__(self,
+                 embedding_model: str = EMBEDDING_MODEL,
+                 embedding_device=EMBEDDING_DEVICE,
+                 ):
+        self.embeddings: Embeddings = HuggingFaceEmbeddings(model_name=embedding_model_dict[embedding_model],
+                                                model_kwargs={'device': embedding_device})
+        self.myAnalyticDB = MyAnalyticDB(collection_name=LANGCHAIN_DEFAULT_KNOWLEDGE_NAME, embedding_function=self.embeddings,
+                            connection_string=CONNECTION_STRING, pre_get_collection=False,
+                            pre_delete_collection=False)
+
     def init_cfg(self,
                  embedding_model: str = EMBEDDING_MODEL,
                  embedding_device=EMBEDDING_DEVICE,
@@ -155,15 +161,22 @@ class LocalDocQA:
                  top_k=VECTOR_SEARCH_TOP_K,
                  ):
         self.llm_model_chain = llm_model
-        self.embeddings = HuggingFaceEmbeddings(model_name=embedding_model_dict[embedding_model],
+        self.embeddings: Embeddings = HuggingFaceEmbeddings(model_name=embedding_model_dict[embedding_model],
                                                 model_kwargs={'device': embedding_device})
         self.top_k = top_k
+        self.myAnalyticDB = MyAnalyticDB(collection_name=LANGCHAIN_DEFAULT_KNOWLEDGE_NAME, embedding_function=self.embeddings,
+                            connection_string=CONNECTION_STRING, pre_get_collection=False,
+                            pre_delete_collection=False)
+
+
+    def load_vector_store(self, knowledge_name):
+        self.myAnalyticDB.set_collection_name(knowledge_name)
+        return self.myAnalyticDB
 
     def init_knowledge_vector_store(self,
                                     filepath: str or List[str],
                                     knowledge_name: str or os.PathLike = None,
-                                    sentence_size=SENTENCE_SIZE,
-                                    pre_delete_knowledge=False):
+                                    sentence_size=SENTENCE_SIZE):
         print(f"初始化 {knowledge_name}")
         loaded_files = []
         failed_files = []
@@ -210,7 +223,7 @@ class LocalDocQA:
             logger.info("文件加载完毕，正在生成向量库")
             if not knowledge_name:
                 knowledge_name = LANGCHAIN_DEFAULT_KNOWLEDGE_NAME
-            vector_store = load_vector_store(knowledge_name, self.embeddings, pre_delete_knowledge=pre_delete_knowledge)
+            vector_store = self.load_vector_store(knowledge_name)
             vector_store.add_documents(docs)  # docs 为Document列表
             torch_gc()
             return knowledge_name, loaded_files
@@ -229,7 +242,7 @@ class LocalDocQA:
                 text_splitter = ChineseTextSplitter(pdf=False, sentence_size=sentence_size)
                 docs = text_splitter.split_documents(docs)
 
-            vector_store = load_vector_store(knowledge_name, self.embeddings)
+            vector_store = self.load_vector_store(knowledge_name)
             vector_store.add_documents(docs)  # docs 为Document列表
             torch_gc()
             return knowledge_name, [one_title]
@@ -242,7 +255,7 @@ class LocalDocQA:
         if not knowledge_name:
             logger.error("知识库名称错误")
             return None
-        vector_store = load_vector_store(knowledge_name, self.embeddings)
+        vector_store = self.load_vector_store(knowledge_name)
         vector_store.chunk_size = self.chunk_size
         vector_store.chunk_conent = self.chunk_conent
         vector_store.score_threshold = self.score_threshold
@@ -277,7 +290,7 @@ class LocalDocQA:
         if not knowledge_name:
             logger.error("知识库名称错误")
             return None
-        vector_store = load_vector_store(knowledge_name, self.embeddings)
+        vector_store = self.load_vector_store(knowledge_name)
         vector_store.chunk_conent = chunk_conent
         vector_store.score_threshold = score_threshold
         vector_store.chunk_size = chunk_size
@@ -313,7 +326,7 @@ class LocalDocQA:
                                       filepath: str or List[str],
                                       knowledge_name):
         print(f"删除 {knowledge_name} 的文件 {filepath}")
-        vector_store = load_vector_store(knowledge_name, self.embeddings)
+        vector_store = self.load_vector_store(knowledge_name)
         status = vector_store.delete_doc(filepath)
         return status
 
@@ -325,7 +338,7 @@ class LocalDocQA:
         if not knowledge_name:
             logger.error("知识库名称错误")
             return f"docs update fail"
-        vector_store = load_vector_store(knowledge_name, self.embeddings)
+        vector_store = self.load_vector_store(knowledge_name)
         status = vector_store.update_doc(filepath, docs)
         return status
 
@@ -336,7 +349,7 @@ class LocalDocQA:
         if not knowledge_name:
             logger.error("知识库名称错误")
             return None
-        vector_store = load_vector_store(knowledge_name, self.embeddings, pre_get_knowledge=True)
+        vector_store = self.load_vector_store(knowledge_name)
         docs = vector_store.list_docs()
         if fullpath:
             return docs
@@ -348,19 +361,16 @@ class LocalDocQA:
         if not knowledge_name:
             logger.error("知识库名称错误")
             return None
-        # 检查langchain_collections即可，不需要获取knowledge_name的表
-        vector_store = load_vector_store(knowledge_name, self.embeddings, pre_get_knowledge=False)
-        return vector_store.check_collection_if_exists(knowledge_name)
+        return self.myAnalyticDB.check_collection_if_exists(knowledge_name)
 
     def get_knowledge_list(self):
         print("获取knowledge列表")
         # 获取langchain_collections里所有的表即可，不需要获取knowledge_name的表
-        vector_store = load_vector_store(LANGCHAIN_DEFAULT_KNOWLEDGE_NAME, self.embeddings, pre_get_knowledge=False)
-        return vector_store.get_collections()
+        return self.myAnalyticDB.get_collections()
 
     def delete_knowledge(self, knowledge_name):
         print(f"删除 {knowledge_name}")
-        vector_store = load_vector_store(knowledge_name, self.embeddings, pre_get_knowledge=True)
+        vector_store = self.load_vector_store(knowledge_name)
         return vector_store.delete_collection()
 
 

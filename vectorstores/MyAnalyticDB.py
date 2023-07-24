@@ -180,9 +180,10 @@ class MyAnalyticDB(AnalyticDB, VectorStore):
                 return [record.collection_name for record in result.all()]
 
     def set_collection_name(self, collection_name):
-        self.Base.metadata.remove(self.collection_table)
+        if self.collection_table is not None:
+            self.Base.metadata.remove(self.collection_table)
         self.collection_name = collection_name
-        self.create_table_if_not_exists()
+        self.collection_table = self.create_table_if_not_exists()
 
     def add_texts(
             self,
@@ -401,6 +402,8 @@ class MyAnalyticDB(AnalyticDB, VectorStore):
                 last_l = result.id - width - 1
                 last_r = result.id + width + 1
 
+        if len(id_set) == 0:
+            return []
         print("id_set", id_set)
         id_list = sorted(list(id_set))
         # 连续的id分在一起，成为一个id seq
