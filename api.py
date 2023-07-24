@@ -311,7 +311,7 @@ async def local_doc_chat(
             pass
         source_documents = [
             f"""出处 [{inum + 1}] {os.path.split(doc.metadata['source'])[-1]}：\n\n{doc.page_content}\n\n"""
-            f"""相关度：{doc.metadata['score']}\n\n"""
+            f"""距离：{doc.metadata['score']}\n\n"""
             for inum, doc in enumerate(resp["source_documents"])
         ]
 
@@ -407,7 +407,7 @@ async def stream_chat(websocket: WebSocket):
 
         source_documents = [
             f"""出处 [{inum + 1}] {os.path.split(doc.metadata['source'])[-1]}：\n\n{doc.page_content}\n\n"""
-            f"""相关度：{doc.metadata['score']}\n\n"""
+            f"""距离：{doc.metadata['score']}\n\n"""
             for inum, doc in enumerate(resp["source_documents"])
         ]
 
@@ -443,7 +443,7 @@ async def stream_chat_bing(websocket: WebSocket):
 
         source_documents = [
             f"""出处 [{inum + 1}] {os.path.split(doc.metadata['source'])[-1]}：\n\n{doc.page_content}\n\n"""
-            f"""相关度：{doc.metadata['score']}\n\n"""
+            f"""距离：{doc.metadata['score']}\n\n"""
             for inum, doc in enumerate(resp["source_documents"])
         ]
 

@@ -11,7 +11,7 @@ logging.basicConfig(format=LOG_FORMAT)
 
 LANGCHAIN_DEFAULT_EMBEDDING_DIM = 1024
 LANGCHAIN_DEFAULT_KNOWLEDGE_NAME = "langchain_document"
-LANGCHAIN_DEFAULT_COLLECTIONS_NAME = "langchain_pg_collection"
+LANGCHAIN_DEFAULT_COLLECTIONS_SET_NAME = "langchain_collections"
 
 
 # 在以下字典中修改属性值，以指定本地embedding模型存储位置
@@ -191,8 +191,9 @@ llm_model_dict = {
 }
 
 # LLM 名称
-LLM_MODEL = "chatglm2-6b"
-# LLM_MODEL = "chatglm2-6b-int4"
+# LLM_MODEL = "chatglm-6b-int4"
+# LLM_MODEL = "chatglm2-6b"
+LLM_MODEL = "chatglm2-6b-int4"
 # 量化加载8bit 模型
 LOAD_IN_8BIT = False
 # Load the model with bfloat16 precision. Requires NVIDIA Ampere GPU.
@@ -237,8 +238,8 @@ LLM_HISTORY_LEN = 3
 # 知识库检索时返回的匹配内容条数
 VECTOR_SEARCH_TOP_K = 5
 
-# 知识检索内容相关度 Score, 数值范围约为0-1100，如果为0，则不生效，建议设置为500左右，经测试设置为小于500时，匹配结果更精准
-VECTOR_SEARCH_SCORE_THRESHOLD = 500
+# 知识检索内容距离 Score, 数值范围约为0-1100，如果为0，则不生效，建议设置为500左右，经测试设置为小于500时，匹配结果更精准
+VECTOR_SEARCH_SCORE_THRESHOLD = 0
 
 NLTK_DATA_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "nltk_data")
 

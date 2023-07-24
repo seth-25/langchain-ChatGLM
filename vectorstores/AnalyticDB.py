@@ -5,10 +5,9 @@ import os
 import uuid
 from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tuple, Type
 
-from langchain.schema import Document
-
 from configs.model_config import *
 
+from sqlalchemy.sql.expression import cast
 from sqlalchemy import REAL, Column, String, Table, create_engine, insert, text, Index, ForeignKey, select
 from sqlalchemy.dialects.postgresql import ARRAY, JSON, TEXT, UUID
 try:
@@ -92,7 +91,7 @@ class AnalyticDB(VectorStore):
     def create_collects_set_if_not_exists(self) -> Table:
         # Define the dynamic collections set table
         collections_table = Table(
-            LANGCHAIN_DEFAULT_COLLECTIONS_NAME,
+            LANGCHAIN_DEFAULT_COLLECTIONS_SET_NAME,
             self.Base.metadata,
             Column('id', TEXT, primary_key=True, default=uuid.uuid4),
             Column('knowledge_name', String),
@@ -110,7 +109,7 @@ class AnalyticDB(VectorStore):
                 knowledge_query = text(
                     f"""
                       SELECT 1
-                      FROM {LANGCHAIN_DEFAULT_COLLECTIONS_NAME}
+                      FROM {LANGCHAIN_DEFAULT_COLLECTIONS_SET_NAME}
                       WHERE knowledge_name = '{knowledge_name}';
                   """
                 )
@@ -166,7 +165,7 @@ class AnalyticDB(VectorStore):
                 knowledge_query = text(
                     f"""
                       SELECT 1
-                      FROM {LANGCHAIN_DEFAULT_COLLECTIONS_NAME}
+                      FROM {LANGCHAIN_DEFAULT_COLLECTIONS_SET_NAME}
                       WHERE knowledge_name = '{self.knowledge_name}';
                   """
                 )
@@ -181,7 +180,7 @@ class AnalyticDB(VectorStore):
         self.logger.debug("Trying to delete knowledge")
         drop_statement = text(f"DROP TABLE IF EXISTS {self.knowledge_name};")
         delete_knowledge_record = text(
-            f"DELETE FROM {LANGCHAIN_DEFAULT_COLLECTIONS_NAME} WHERE knowledge_name = '{self.knowledge_name}';")
+            f"DELETE FROM {LANGCHAIN_DEFAULT_COLLECTIONS_SET_NAME} WHERE knowledge_name = '{self.knowledge_name}';")
         with self.engine.connect() as conn:
             with conn.begin():
                 conn.execute(drop_statement)
@@ -189,7 +188,7 @@ class AnalyticDB(VectorStore):
 
     def get_collections(self) -> List[str]:
         collections_query = text(
-            f"SELECT knowledge_name FROM {LANGCHAIN_DEFAULT_COLLECTIONS_NAME};")
+            f"SELECT knowledge_name FROM {LANGCHAIN_DEFAULT_COLLECTIONS_SET_NAME};")
         with self.engine.connect() as conn:
             with conn.begin():
                 result = conn.execute(collections_query)
@@ -550,3 +549,14 @@ class AnalyticDB(VectorStore):
                 s = select(self.knowledge_table.c.metadata["source"])
                 result = conn.execute(s).fetchall()
         return list(set(v[0] for v in result))
+
+
+    # def list_docs_(self):
+    #     with self.engine.connect() as conn:
+    #         with conn.begin():
+    #             # s = select(self.knowledge_table.c.metadata["source"]).group_by(self.knowledge_table.c.metadata["source"])
+    #             s = select().select_from(self.knowledge_table).group_by(self.knowledge_table.c.metadata['source'])
+    #             # s = select(self.knowledge_table.c.metadata["source"])
+    #             result = conn.execute(s).fetchall()
+    #             print(result)
+        # return list(set(v[0] for v in result))

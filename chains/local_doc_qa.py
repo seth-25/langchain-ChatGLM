@@ -1,6 +1,7 @@
 from langchain.embeddings.huggingface import HuggingFaceEmbeddings
-from vectorstores import MyFAISS, AnalyticDB
-from langchain.document_loaders import UnstructuredFileLoader, TextLoader, CSVLoader
+from vectorstores import MyFAISS, MyAnalyticDB
+from langchain.vectorstores.analyticdb import AnalyticDB
+from langchain.document_loaders import UnstructuredFileLoader, TextLoader, CSVLoader, UnstructuredMarkdownLoader
 from configs.model_config import *
 import datetime
 from textsplitter import ChineseTextSplitter
@@ -41,9 +42,9 @@ CONNECTION_STRING = AnalyticDB.connection_string_from_db_params(
 def load_vector_store(knowledge_name, embeddings, pre_get_knowledge=True, pre_delete_knowledge=False):
     if not knowledge_name:
         raise Exception("知识库名称为空")
-    return AnalyticDB(knowledge_name=knowledge_name, embedding_function=embeddings,
-                      connection_string=CONNECTION_STRING, pre_get_knowledge=pre_get_knowledge,
-                      pre_delete_knowledge=pre_delete_knowledge)
+    return MyAnalyticDB(collection_name=knowledge_name, embedding_function=embeddings,
+                        connection_string=CONNECTION_STRING, pre_get_collection=pre_get_knowledge,
+                        pre_delete_collection=pre_delete_knowledge)
 
 
 def tree(filepath, ignore_dir_names=None, ignore_file_names=None):
@@ -95,6 +96,11 @@ def load_file(filepath, sentence_size=SENTENCE_SIZE, using_zh_title_enhance=ZH_T
     if using_zh_title_enhance:
         docs = zh_title_enhance(docs)
     # write_check_file(filepath, docs)
+
+    print("doc ===========================")
+    for doc in docs:
+        print(doc)
+    print("doc ===========================")
     return docs
 
 
@@ -154,6 +160,7 @@ class LocalDocQA:
                                     knowledge_name: str or os.PathLike = None,
                                     sentence_size=SENTENCE_SIZE,
                                     pre_delete_knowledge=False):
+        print(f"初始化 {knowledge_name}")
         loaded_files = []
         failed_files = []
         if isinstance(filepath, str):
@@ -227,6 +234,7 @@ class LocalDocQA:
             return None, [one_title]
 
     def get_knowledge_based_answer(self, query, knowledge_name, chat_history=[], streaming: bool = STREAMING):
+        print(f"查询：知识库 {knowledge_name}，问题 {query}")
         if not knowledge_name:
             logger.error("知识库名称错误")
             return None
@@ -300,6 +308,7 @@ class LocalDocQA:
     def delete_file_from_vector_store(self,
                                       filepath: str or List[str],
                                       knowledge_name):
+        print(f"删除 {knowledge_name} 的文件 {filepath}")
         vector_store = load_vector_store(knowledge_name, self.embeddings)
         status = vector_store.delete_doc(filepath)
         return status
@@ -308,6 +317,7 @@ class LocalDocQA:
                                       filepath: str or List[str],
                                       knowledge_name,
                                       docs: List[Document], ):
+        print(f"更新 {knowledge_name} 的文件 {filepath}")
         if not knowledge_name:
             logger.error("知识库名称错误")
             return f"docs update fail"
@@ -318,6 +328,7 @@ class LocalDocQA:
     def list_file_from_vector_store(self,
                                     knowledge_name,
                                     fullpath=False):
+        print(f"列出 {knowledge_name} 内的文件")
         if not knowledge_name:
             logger.error("知识库名称错误")
             return None
@@ -329,19 +340,22 @@ class LocalDocQA:
             return [os.path.split(doc)[-1] for doc in docs]
 
     def check_knowledge_in_collections(self, knowledge_name):
+        print(f"检查 {knowledge_name} 是否存在")
         if not knowledge_name:
             logger.error("知识库名称错误")
             return None
         vector_store = load_vector_store(knowledge_name, self.embeddings, pre_get_knowledge=False)
-        return vector_store.check_knowledge_if_exists(knowledge_name)
+        return vector_store.check_collection_if_exists(knowledge_name)
 
     def get_knowledge_list(self):
+        print("获取knowledge列表")
         vector_store = load_vector_store(LANGCHAIN_DEFAULT_KNOWLEDGE_NAME, self.embeddings, pre_get_knowledge=False)
         return vector_store.get_collections()
 
     def delete_knowledge(self, knowledge_name):
-        vector_store = load_vector_store(knowledge_name, self.embeddings, pre_get_knowledge=False)
-        return vector_store.delete_knowledge()
+        print(f"删除 {knowledge_name}")
+        vector_store = load_vector_store(knowledge_name, self.embeddings, pre_get_knowledge=True)
+        return vector_store.delete_collection()
 
 
 # if __name__ == "__main__":
@@ -369,7 +383,7 @@ class LocalDocQA:
 #         last_print_len = len(resp["result"])
 #     source_text = [f"""出处 [{inum + 1}] {doc.metadata['source'] if doc.metadata['source'].startswith("http")
 #     else os.path.split(doc.metadata['source'])[-1]}：\n\n{doc.page_content}\n\n"""
-#                    # f"""相关度：{doc.metadata['score']}\n\n"""
+#                    # f"""距离：{doc.metadata['score']}\n\n"""
 #                    for inum, doc in
 #                    enumerate(resp["source_documents"])]
 #     logger.info("\n\n" + "\n\n".join(source_text))

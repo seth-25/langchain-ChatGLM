@@ -52,12 +52,11 @@ def get_answer(query, knowledge_name, history, mode, score_threshold=VECTOR_SEAR
         for resp, history in local_doc_qa.get_knowledge_based_answer(
                 query=query, knowledge_name=knowledge_name, chat_history=history, streaming=streaming):
             source = "\n\n"
-            source += "".join(
-                [f"""<details> <summary>出处 [{i + 1}] {os.path.split(doc.metadata["source"])[-1]}</summary>\n"""
-                 f"""{doc.page_content}\n"""
-                 f"""</details>"""
-                 for i, doc in
-                 enumerate(resp["source_documents"])])
+            for i, doc in enumerate(resp["source_documents"]):
+                doc_page_content = doc.page_content.replace('\n', '<br>')
+                source += f"""<details> <summary>出处 [{i + 1}] {os.path.split(doc.metadata["source"])[-1]} \t 距离 {doc.metadata['score']}</summary>\n """
+                source += f"""{doc_page_content}\n"""
+                source += f"""</details>"""
             history[-1][-1] += source
             yield history, ""
     elif mode == "知识库测试":
@@ -69,11 +68,11 @@ def get_answer(query, knowledge_name, history, mode, score_threshold=VECTOR_SEAR
                                                                         chunk_size=chunk_size)
             if not resp["source_documents"]:
                 yield history + [[query,
-                                  "根据您的设定，没有匹配到任何内容，请确认您设置的知识相关度 Score 阈值是否过小或其他参数是否正确。"]], ""
+                                  "根据您的设定，没有匹配到任何内容，请确认您设置的知识距离 Score 阈值是否过小或其他参数是否正确。"]], ""
             else:
                 source = "\n".join(
                     [
-                        f"""<details open> <summary>【知识相关度 Score】：{doc.metadata["score"]} - 【出处{i + 1}】：  {os.path.split(doc.metadata["source"])[-1]} </summary>\n"""
+                        f"""<details open> <summary>【知识距离 Score】：{doc.metadata["score"]} - 【出处{i + 1}】：  {os.path.split(doc.metadata["source"])[-1]} </summary>\n"""
                         f"""{doc.page_content}\n"""
                         f"""</details>"""
                         for i, doc in
@@ -189,7 +188,7 @@ def change_vs_name_input(knowledge_name, history):
 knowledge_base_test_mode_info = ("【注意】\n\n"
                                  "1. 您已进入知识库测试模式，您输入的任何对话内容都将用于进行知识库查询，"
                                  "并仅输出知识库匹配出的内容及相似度分值和及输入的文本源路径，查询的内容并不会进入模型查询。\n\n"
-                                 "2. 知识相关度 Score 经测试，建议设置为 500 或更低，具体设置情况请结合实际使用调整。"
+                                 "2. 知识距离 Score 经测试，建议设置为 500 或更低，具体设置情况请结合实际使用调整。"
                                  """3. 使用"添加单条数据"添加文本至知识库时，内容如未分段，则内容越多越会稀释各查询内容与之关联的score阈值。\n\n"""
                                  "4. 单条内容长度建议设置在100-150左右。\n\n"
                                  "5. 本界面用于知识入库及知识匹配相关参数设定，但当前版本中，"
@@ -446,7 +445,7 @@ with gr.Blocks(css=block_css, theme=gr.themes.Default(**default_theme_args)) as 
                             outputs=[vs_setting, knowledge_set, chatbot])
                 with knowledge_set:
                     score_threshold = gr.Number(value=VECTOR_SEARCH_SCORE_THRESHOLD,
-                                                label="知识相关度 Score 阈值，分值越低匹配度越高",
+                                                label="知识距离 Score 阈值，分值越低匹配度越高",
                                                 precision=0,
                                                 interactive=True)
                     vector_search_top_k = gr.Number(value=VECTOR_SEARCH_TOP_K, precision=0,
