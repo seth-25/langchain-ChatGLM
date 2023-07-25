@@ -163,6 +163,7 @@ class LocalDocQA:
         return self.myAnalyticDB
 
     def create_knowledge_vector_store(self, knowledge_name: str or os.PathLike = None):
+        print(f"创建 {knowledge_name}")
         _, table_is_exist = self.myAnalyticDB.create_table_if_not_exists(knowledge_name)
         return table_is_exist
 
@@ -359,7 +360,6 @@ class LocalDocQA:
 
     def get_knowledge_list(self):
         print("获取knowledge列表")
-        # 获取langchain_collections里所有的表即可，不需要获取knowledge_name的表
         return self.myAnalyticDB.get_collections()
 
     def delete_knowledge(self, knowledge_name):
