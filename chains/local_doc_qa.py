@@ -2,22 +2,14 @@ from langchain.embeddings.base import Embeddings
 from langchain.embeddings.huggingface import HuggingFaceEmbeddings
 from vectorstores import MyFAISS, MyAnalyticDB
 from langchain.vectorstores.analyticdb import AnalyticDB
-from langchain.document_loaders import UnstructuredFileLoader, TextLoader, CSVLoader, UnstructuredMarkdownLoader
+from langchain.document_loaders import UnstructuredFileLoader, TextLoader, CSVLoader
 from configs.model_config import *
-import datetime
 from textsplitter import ChineseTextSplitter
 from typing import List
 from utils import torch_gc
 from tqdm import tqdm
-from pypinyin import lazy_pinyin
-from models.base import (BaseAnswer,
-                         AnswerResult)
-from models.loader.args import parser
-from models.loader import LoaderCheckPoint
-import models.shared as shared
 from agent import bing_search
 from langchain.docstore.document import Document
-from functools import lru_cache
 from textsplitter.zh_title_enhance import zh_title_enhance
 from langchain.chains.base import Chain
 
