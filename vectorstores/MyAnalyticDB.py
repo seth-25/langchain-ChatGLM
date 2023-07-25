@@ -68,7 +68,7 @@ class MyAnalyticDB(AnalyticDB, VectorStore):
     def create_collects_set_if_not_exists(self) -> Table:
         # Define the dynamic collections set table
         collections_table = Table(
-            LANGCHAIN_DEFAULT_COLLECTIONS_SET_NAME,
+            LANGCHAIN_DEFAULT_COLLECTIONS_NAME,
             self.Base.metadata,
             Column('id', TEXT, primary_key=True, default=uuid.uuid4),
             Column('collection_name', String),
@@ -87,7 +87,7 @@ class MyAnalyticDB(AnalyticDB, VectorStore):
                 collection_query = text(
                     f"""
                         SELECT 1
-                        FROM {LANGCHAIN_DEFAULT_COLLECTIONS_SET_NAME}
+                        FROM {LANGCHAIN_DEFAULT_COLLECTIONS_NAME}
                         WHERE collection_name = '{collection_name}';
                     """
                 )
@@ -98,7 +98,7 @@ class MyAnalyticDB(AnalyticDB, VectorStore):
             return False
 
     def create_table_if_not_exists(self) -> Table:
-        if self.collection_name == LANGCHAIN_DEFAULT_COLLECTIONS_SET_NAME:
+        if self.collection_name == LANGCHAIN_DEFAULT_COLLECTIONS_NAME:
             raise Exception("The collection table name should not be same to the collections set table name")
 
         # Define the dynamic collection embedding table
@@ -149,7 +149,7 @@ class MyAnalyticDB(AnalyticDB, VectorStore):
                 collection_query = text(
                     f"""
                        SELECT 1
-                       FROM {LANGCHAIN_DEFAULT_COLLECTIONS_SET_NAME}
+                       FROM {LANGCHAIN_DEFAULT_COLLECTIONS_NAME}
                        WHERE collection_name = '{self.collection_name}';
                    """
                 )
@@ -165,7 +165,7 @@ class MyAnalyticDB(AnalyticDB, VectorStore):
         drop_statement = text(f"DROP TABLE IF EXISTS {self.collection_name};")
         self.Base.metadata.remove(self.collection_table)
         delete_collection_record = text(
-            f"DELETE FROM {LANGCHAIN_DEFAULT_COLLECTIONS_SET_NAME} WHERE collection_name = '{self.collection_name}';")
+            f"DELETE FROM {LANGCHAIN_DEFAULT_COLLECTIONS_NAME} WHERE collection_name = '{self.collection_name}';")
         with self.engine.connect() as conn:
             with conn.begin():
                 conn.execute(drop_statement)
@@ -173,7 +173,7 @@ class MyAnalyticDB(AnalyticDB, VectorStore):
 
     def get_collections(self) -> List[str]:
         collections_query = text(
-            f"SELECT collection_name FROM {LANGCHAIN_DEFAULT_COLLECTIONS_SET_NAME};")
+            f"SELECT collection_name FROM {LANGCHAIN_DEFAULT_COLLECTIONS_NAME};")
         with self.engine.connect() as conn:
             with conn.begin():
                 result = conn.execute(collections_query)

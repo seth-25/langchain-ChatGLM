@@ -11,8 +11,7 @@ logging.basicConfig(format=LOG_FORMAT)
 
 LANGCHAIN_DEFAULT_EMBEDDING_DIM = 1024
 LANGCHAIN_DEFAULT_KNOWLEDGE_NAME = "langchain_document"
-LANGCHAIN_DEFAULT_COLLECTIONS_SET_NAME = "langchain_collections"
-
+LANGCHAIN_DEFAULT_COLLECTIONS_NAME = "langchain_collections"
 
 # 在以下字典中修改属性值，以指定本地embedding模型存储位置
 # 如将 "text2vec": "GanymedeNil/text2vec-large-chinese" 修改为 "text2vec": "User/Downloads/text2vec-large-chinese"
@@ -160,7 +159,7 @@ llm_model_dict = {
         "api_base_url": "http://localhost:8000/v1",  # "name"修改为fastchat服务中的"api_base_url"
         "api_key": "EMPTY"
     },
-        # 通过 fastchat 调用的模型请参考如下格式
+    # 通过 fastchat 调用的模型请参考如下格式
     "fastchat-chatglm-6b-int4": {
         "name": "chatglm-6b-int4",  # "name"修改为fastchat服务中的"model_name"
         "pretrained_model_name": "chatglm-6b-int4",
@@ -226,7 +225,7 @@ STREAMING = True
 
 # Use p-tuning-v2 PrefixEncoder
 USE_PTUNING_V2 = False
-PTUNING_DIR='./ptuning-v2'
+PTUNING_DIR = './ptuning-v2'
 # LLM running device
 LLM_DEVICE = "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
 
