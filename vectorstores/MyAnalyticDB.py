@@ -55,8 +55,8 @@ class MyAnalyticDB(AnalyticDB, VectorStore):
         self.score_threshold = VECTOR_SEARCH_SCORE_THRESHOLD
         self.chunk_size = CHUNK_SIZE
 
-    # def __del__(self):
-    #     self.Base.metadata.clear()
+    def __del__(self):
+        self.Base.metadata.clear()
 
     def create_collection(self) -> None:
         if self.pre_delete_collection:
