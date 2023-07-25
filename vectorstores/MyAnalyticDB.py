@@ -61,11 +61,11 @@ class MyAnalyticDB(AnalyticDB, VectorStore):
     def create_collection(self) -> None:
         if self.pre_delete_collection:
             self.delete_collection()
-        self.collections_set = self.create_collects_set_if_not_exists()
+        self.collections_set = self.create_collections_if_not_exists()
         if self.pre_get_collection:
-            self.collection_table = self.create_table_if_not_exists()
+            self.collection_table, table_is_exist = self.create_table_if_not_exists()
 
-    def create_collects_set_if_not_exists(self) -> Table:
+    def create_collections_if_not_exists(self) -> Table:
         # Define the dynamic collections set table
         collections_table = Table(
             LANGCHAIN_DEFAULT_COLLECTIONS_NAME,
@@ -97,13 +97,15 @@ class MyAnalyticDB(AnalyticDB, VectorStore):
         else:
             return False
 
-    def create_table_if_not_exists(self) -> Table:
-        if self.collection_name == LANGCHAIN_DEFAULT_COLLECTIONS_NAME:
-            raise Exception("The collection table name should not be same to the collections set table name")
+    def create_table_if_not_exists(self, collection_name=None) -> [Table, bool]:
+        if collection_name is None:
+            collection_name = self.collection_name
+        if collection_name == LANGCHAIN_DEFAULT_COLLECTIONS_NAME:
+            raise Exception(f"知识库表名不能和统计知识库的表名{LANGCHAIN_DEFAULT_COLLECTIONS_NAME}相同")
 
         # Define the dynamic collection embedding table
         collection_table = Table(
-            self.collection_name,
+            collection_name,
             self.Base.metadata,
             Column("id", Integer, primary_key=True, autoincrement=True),
             Column("uid", TEXT, default=uuid.uuid4),
@@ -114,14 +116,14 @@ class MyAnalyticDB(AnalyticDB, VectorStore):
             Column("source", TEXT, nullable=True),
             extend_existing=True,
         )
-
+        table_is_exist = True
         with self.engine.connect() as conn:
             with conn.begin():
                 # Create the table
                 self.Base.metadata.create_all(conn)
 
                 # Check if the index exists
-                index_name = f"{self.collection_name}_embedding_idx"
+                index_name = f"{collection_name}_embedding_idx"
                 index_query = text(
                     f"""
                      SELECT 1
@@ -136,7 +138,7 @@ class MyAnalyticDB(AnalyticDB, VectorStore):
                     index_statement = text(
                         f"""
                          CREATE INDEX {index_name}
-                         ON {self.collection_name} USING ann(embedding)
+                         ON {collection_name} USING ann(embedding)
                          WITH (
                              "dim" = {self.embedding_dimension},
                              "hnsw_m" = 100
@@ -150,15 +152,16 @@ class MyAnalyticDB(AnalyticDB, VectorStore):
                     f"""
                        SELECT 1
                        FROM {LANGCHAIN_DEFAULT_COLLECTIONS_NAME}
-                       WHERE collection_name = '{self.collection_name}';
+                       WHERE collection_name = '{collection_name}';
                    """
                 )
                 collection_result = conn.execute(collection_query).scalar()
                 # Add the collection in collections set if it doesn't exist
                 if not collection_result:
-                    ins = self.collections_set.insert().values(collection_name=self.collection_name)
+                    table_is_exist = False
+                    ins = self.collections_set.insert().values(collection_name=collection_name)
                     conn.execute(ins)
-        return collection_table
+        return collection_table, table_is_exist
 
     def delete_collection(self) -> None:
         self.logger.debug("Trying to delete knowledge")
@@ -183,7 +186,7 @@ class MyAnalyticDB(AnalyticDB, VectorStore):
         if self.collection_table is not None:
             self.Base.metadata.remove(self.collection_table)
         self.collection_name = collection_name
-        self.collection_table = self.create_table_if_not_exists()
+        self.collection_table, table_is_exist = self.create_table_if_not_exists()
 
     def add_texts(
             self,

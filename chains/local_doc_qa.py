@@ -31,9 +31,6 @@ CONNECTION_STRING = AnalyticDB.connection_string_from_db_params(
 )
 
 
-
-
-
 def tree(filepath, ignore_dir_names=None, ignore_file_names=None):
     """返回两个列表，第一个列表为 filepath 下全部文件的完整路径, 第二个为对应的文件名"""
     if ignore_dir_names is None:
@@ -58,7 +55,6 @@ def tree(filepath, ignore_dir_names=None, ignore_file_names=None):
 
 
 def load_file(filepath, sentence_size=SENTENCE_SIZE, using_zh_title_enhance=ZH_TITLE_ENHANCE):
-
     if filepath.lower().endswith(".md"):
         loader = UnstructuredFileLoader(filepath, mode="elements")
         docs = loader.load()
@@ -141,10 +137,11 @@ class LocalDocQA:
                  embedding_device=EMBEDDING_DEVICE,
                  ):
         self.embeddings: Embeddings = HuggingFaceEmbeddings(model_name=embedding_model_dict[embedding_model],
-                                                model_kwargs={'device': embedding_device})
-        self.myAnalyticDB = MyAnalyticDB(collection_name=LANGCHAIN_DEFAULT_KNOWLEDGE_NAME, embedding_function=self.embeddings,
-                            connection_string=CONNECTION_STRING, pre_get_collection=False,
-                            pre_delete_collection=False)
+                                                            model_kwargs={'device': embedding_device})
+        self.myAnalyticDB = MyAnalyticDB(collection_name=LANGCHAIN_DEFAULT_KNOWLEDGE_NAME,
+                                         embedding_function=self.embeddings,
+                                         connection_string=CONNECTION_STRING, pre_get_collection=False,
+                                         pre_delete_collection=False)
 
     def init_cfg(self,
                  embedding_model: str = EMBEDDING_MODEL,
@@ -154,17 +151,22 @@ class LocalDocQA:
                  ):
         self.llm_model_chain = llm_model
         self.embeddings: Embeddings = HuggingFaceEmbeddings(model_name=embedding_model_dict[embedding_model],
-                                                model_kwargs={'device': embedding_device})
+                                                            model_kwargs={'device': embedding_device})
         self.top_k = top_k
-        self.myAnalyticDB = MyAnalyticDB(collection_name=LANGCHAIN_DEFAULT_KNOWLEDGE_NAME, embedding_function=self.embeddings,
-                            connection_string=CONNECTION_STRING, pre_get_collection=False,
-                            pre_delete_collection=False)
-
+        self.myAnalyticDB = MyAnalyticDB(collection_name=LANGCHAIN_DEFAULT_KNOWLEDGE_NAME,
+                                         embedding_function=self.embeddings,
+                                         connection_string=CONNECTION_STRING, pre_get_collection=False,
+                                         pre_delete_collection=False)
 
     def load_vector_store(self, knowledge_name):
         self.myAnalyticDB.set_collection_name(knowledge_name)
         return self.myAnalyticDB
 
+    def create_knowledge_vector_store(self, knowledge_name: str or os.PathLike = None):
+        _, table_is_exist = self.myAnalyticDB.create_table_if_not_exists(knowledge_name)
+        return table_is_exist
+
+    # 上传文件并创建知识库
     def init_knowledge_vector_store(self,
                                     filepath: str or List[str],
                                     knowledge_name: str or os.PathLike = None,
@@ -364,7 +366,6 @@ class LocalDocQA:
         print(f"删除 {knowledge_name}")
         vector_store = self.load_vector_store(knowledge_name)
         return vector_store.delete_collection()
-
 
 # if __name__ == "__main__":
 #     # 初始化消息
