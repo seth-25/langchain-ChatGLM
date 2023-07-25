@@ -509,7 +509,7 @@ def api_start(host, port, **kwargs):
 
     app.post("/chat", response_model=ChatMessage, summary="与模型对话")(chat)
 
-    app.post("/local_doc_qa/create_knowledge", response_model=BaseResponse, summary="创建知识库")(create_knowledge)
+    app.post("/local_doc_qa/create_knowledge_base", response_model=BaseResponse, summary="创建知识库")(create_knowledge)
     app.post("/local_doc_qa/upload_file", response_model=BaseResponse, summary="上传文件到知识库")(upload_file)
     app.post("/local_doc_qa/upload_files", response_model=BaseResponse, summary="批量上传文件到知识库")(upload_files)
     app.post("/local_doc_qa/local_doc_chat", response_model=ChatMessage, summary="与知识库对话")(local_doc_chat)
