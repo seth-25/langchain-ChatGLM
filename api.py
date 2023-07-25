@@ -1,4 +1,4 @@
-#encoding:utf-8
+# encoding:utf-8
 import argparse
 import json
 import os
@@ -103,6 +103,18 @@ def validate_kb_name(knowledge_base_id: str) -> bool:
     return True
 
 
+async def create_knowledge(
+        knowledge_base_id: str = Form(..., description="Knowledge Base Name", example="kb1"),
+):
+    if not validate_kb_name(knowledge_base_id):
+        return BaseResponse(code=403, msg="Don't attack me", data=[])
+    table_is_exist = local_doc_qa.create_knowledge_vector_store(knowledge_base_id)
+    if table_is_exist:
+        return BaseResponse(code=200, msg="知识库已经存在")
+    else:
+        return BaseResponse(code=200, msg="创建知识库成功")
+
+
 async def upload_file(
         file: UploadFile = File(description="A single binary file"),
         knowledge_base_id: str = Form(..., description="Knowledge Base Name", example="kb1"),
@@ -167,6 +179,7 @@ async def upload_files(
     else:
         file_status = f"所有文件均已存在。"
         return BaseResponse(code=200, msg=file_status)
+
 
 async def list_kbs():
     # Get List of Knowledge Base
@@ -279,7 +292,6 @@ async def update_doc(
             else:
                 file_status = f"document {old_doc} success but document {new_doc.filename} upload fail"
                 return BaseResponse(code=500, msg=file_status)
-
 
 
 async def local_doc_chat(
@@ -423,6 +435,7 @@ async def stream_chat(websocket: WebSocket):
         )
         turn += 1
 
+
 async def stream_chat_bing(websocket: WebSocket):
     """
     基于bing搜索的流式问答
@@ -436,7 +449,8 @@ async def stream_chat_bing(websocket: WebSocket):
         await websocket.send_json({"question": question, "turn": turn, "flag": "start"})
 
         last_print_len = 0
-        for resp, history in local_doc_qa.get_search_result_based_answer(question, chat_history=history, streaming=True):
+        for resp, history in local_doc_qa.get_search_result_based_answer(question, chat_history=history,
+                                                                         streaming=True):
             await websocket.send_text(resp["result"][last_print_len:])
             last_print_len = len(resp["result"])
 
@@ -458,6 +472,7 @@ async def stream_chat_bing(websocket: WebSocket):
             )
         )
         turn += 1
+
 
 async def document():
     return RedirectResponse(url="/docs")
@@ -494,6 +509,7 @@ def api_start(host, port, **kwargs):
 
     app.post("/chat", response_model=ChatMessage, summary="与模型对话")(chat)
 
+    app.post("/local_doc_qa/create_knowledge", response_model=BaseResponse, summary="创建知识库")(create_knowledge)
     app.post("/local_doc_qa/upload_file", response_model=BaseResponse, summary="上传文件到知识库")(upload_file)
     app.post("/local_doc_qa/upload_files", response_model=BaseResponse, summary="批量上传文件到知识库")(upload_files)
     app.post("/local_doc_qa/local_doc_chat", response_model=ChatMessage, summary="与知识库对话")(local_doc_chat)
@@ -502,7 +518,8 @@ def api_start(host, port, **kwargs):
     app.get("/local_doc_qa/list_files", response_model=ListDocsResponse, summary="获取知识库内的文件列表")(list_docs)
     app.delete("/local_doc_qa/delete_knowledge_base", response_model=BaseResponse, summary="删除知识库")(delete_kb)
     app.delete("/local_doc_qa/delete_file", response_model=BaseResponse, summary="删除知识库内的文件")(delete_doc)
-    app.post("/local_doc_qa/update_file", response_model=BaseResponse, summary="上传文件到知识库，并删除另一个文件")(update_doc)
+    app.post("/local_doc_qa/update_file", response_model=BaseResponse, summary="上传文件到知识库，并删除另一个文件")(
+        update_doc)
 
     local_doc_qa = LocalDocQA()
     local_doc_qa.init_cfg(

@@ -349,9 +349,9 @@ with gr.Blocks(css=block_css, theme=gr.themes.Default(**default_theme_args)) as 
             with gr.Column(scale=10):
                 chatbot = gr.Chatbot([[None, init_message], [None, model_status.value]],
                                      elem_id="chat-box",
-                                     show_label=False).style(height=750)
+                                     show_label=False, height=750)
                 query = gr.Textbox(show_label=False,
-                                   placeholder="请输入提问内容，按回车进行提交").style(container=False)
+                                   placeholder="请输入提问内容，按回车进行提交", container=False)
             with gr.Column(scale=5):
                 mode = gr.Radio(["LLM 对话", "知识库问答", "Bing搜索问答"],
                                 label="请选择使用模式",
@@ -431,9 +431,9 @@ with gr.Blocks(css=block_css, theme=gr.themes.Default(**default_theme_args)) as 
             with gr.Column(scale=10):
                 chatbot = gr.Chatbot([[None, knowledge_base_test_mode_info]],
                                      elem_id="chat-box",
-                                     show_label=False).style(height=750)
+                                     show_label=False, height=750)
                 query = gr.Textbox(show_label=False,
-                                   placeholder="请输入提问内容，按回车进行提交").style(container=False)
+                                   placeholder="请输入提问内容，按回车进行提交", container=False)
             with gr.Column(scale=5):
                 mode = gr.Radio(["知识库测试"],  # "知识库问答",
                                 label="请选择使用模式",
