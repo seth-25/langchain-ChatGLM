@@ -211,9 +211,9 @@ async def delete_kb(
     if not local_doc_qa.check_knowledge_in_collections(knowledge_base_id):
         return BaseResponse(code=404, msg=f"Knowledge base {knowledge_base_id} not found")
 
+    local_doc_qa.delete_knowledge(knowledge_base_id)
     kb_path = get_kb_path(knowledge_base_id)
     shutil.rmtree(kb_path)
-    local_doc_qa.delete_knowledge(knowledge_base_id)
     return BaseResponse(code=200, msg=f"Knowledge Base {knowledge_base_id} delete success")
 
 

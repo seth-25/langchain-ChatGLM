@@ -1,14 +1,9 @@
-import sys
+from __future__ import annotations
 
-from langchain.vectorstores import AnalyticDB
 from langchain.vectorstores.analyticdb import Base
-from langchain.vectorstores.base import VectorStore
-
-from langchain.embeddings.base import Embeddings
-from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tuple, Type
-from sqlalchemy import Column, String, Table, create_engine, insert, text, Index, ForeignKey, select, Integer, func, \
-    and_, literal_column
-from sqlalchemy.dialects.postgresql import ARRAY, JSON, TEXT, UUID, REAL
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple, Type
+from sqlalchemy import Column, String, Table, create_engine, insert, text, select, Integer, func, and_
+from sqlalchemy.dialects.postgresql import ARRAY, JSON, TEXT, REAL
 
 from langchain.docstore.document import Document
 from langchain.embeddings.base import Embeddings
@@ -22,48 +17,80 @@ try:
 except ImportError:
     from sqlalchemy.ext.declarative import declarative_base
 
+Base = declarative_base()  # type: Any
 
-class MyAnalyticDB(AnalyticDB, VectorStore):
+
+class MyAnalyticDB(VectorStore):
+    """
+    VectorStore implementation using AnalyticDB.
+    AnalyticDB is a distributed full PostgresSQL syntax cloud-native database.
+    - `connection_string` is a postgres connection string.
+    - `embedding_function` any embedding function implementing
+        `langchain.embeddings.base.Embeddings` interface.
+    - `knowledge_name` is the name of the collection to use. (default: langchain_document)
+        - NOTE: This is not the name of the table, but the name of the collection.
+            The tables will be created when initializing the store (if not exists)
+            So, make sure the user has the right permissions to create tables.
+    - `pre_delete_collection` if True, will delete the collection if it exists.
+        (default: False)
+        - Useful for testing.
+    """
     def __init__(
             self,
             connection_string: str,
             embedding_function: Embeddings,
             embedding_dimension: int = LANGCHAIN_DEFAULT_EMBEDDING_DIM,
-            collection_name: str = LANGCHAIN_DEFAULT_KNOWLEDGE_NAME,
             pre_delete_collection: bool = False,
-            pre_get_collection: bool = True,
             logger: Optional[logging.Logger] = None,
             engine_args: Optional[dict] = None,
-    ):
+    ) -> None:
+        self.connection_string = connection_string
+        self.embedding_function = embedding_function
+        self.embedding_dimension = embedding_dimension
+
         self.pre_delete_collection = pre_delete_collection
-        self.pre_get_collection = pre_get_collection
+        self.logger = logger or logging.getLogger(__name__)
+
+        self.collection_name = None
         self.collections_set = None
         self.collection_table = None
         # todo  self.__collection_name
-        # self.Base = declarative_base()
         self.Base = Base
-
-        super().__init__(
-            connection_string=connection_string,
-            embedding_function=embedding_function,
-            embedding_dimension=embedding_dimension,
-            collection_name=collection_name,
-            logger=logger,
-            engine_args=engine_args
-        )
 
         self.score_threshold = VECTOR_SEARCH_SCORE_THRESHOLD
         self.chunk_size = CHUNK_SIZE
 
-    def __del__(self):
-        self.Base.metadata.clear()
+        self.__post_init__(engine_args)
 
-    def create_collection(self) -> None:
+
+    # def __del__(self):
+    #     self.Base.metadata.clear()
+
+    def __post_init__(
+            self,
+            engine_args: Optional[dict] = None,
+    ) -> None:
+        """
+        Initialize the store.
+        """
+
+        _engine_args = engine_args or {}
+
+        if (
+                "pool_recycle" not in _engine_args
+        ):  # Check if pool_recycle is not in _engine_args
+            _engine_args[
+                "pool_recycle"
+            ] = 3600  # Set pool_recycle to 3600s if not present
+
+        self.engine = create_engine(self.connection_string, **_engine_args)
+        self.init_collection()
+
+    def init_collection(self) -> None:
         if self.pre_delete_collection:
             self.delete_collection()
         self.collections_set = self.create_collections_if_not_exists()
-        if self.pre_get_collection:
-            self.collection_table, table_is_exist = self.create_table_if_not_exists()
+        # self.collection_table, table_is_exist = self.create_table_if_not_exists()
 
     def create_collections_if_not_exists(self) -> Table:
         # Define the dynamic collections set table
@@ -98,6 +125,9 @@ class MyAnalyticDB(AnalyticDB, VectorStore):
             return False
 
     def create_table_if_not_exists(self, collection_name=None) -> [Table, bool]:
+        """
+        返回创建的Table对象和bool类型的table_is_exist，用于判断创建的表是否存在
+        """
         if collection_name is None:
             collection_name = self.collection_name
         if collection_name == LANGCHAIN_DEFAULT_COLLECTIONS_NAME:
@@ -109,7 +139,6 @@ class MyAnalyticDB(AnalyticDB, VectorStore):
             self.Base.metadata,
             Column("id", Integer, primary_key=True, autoincrement=True),
             Column("uid", TEXT, default=uuid.uuid4),
-            # Column('collection_id', UUID(as_uuid=True), ForeignKey(f"{_LANGCHAIN_DEFAULT_COLLECTIONS_SET_NAME}.id", ondelete="CASCADE")),
             Column("embedding", ARRAY(REAL)),
             Column("document", String, nullable=True),
             Column("metadata", JSON, nullable=True),
@@ -164,6 +193,8 @@ class MyAnalyticDB(AnalyticDB, VectorStore):
         return collection_table, table_is_exist
 
     def delete_collection(self) -> None:
+        if self.collection_table is None:
+            raise Exception("尚未绑定知识库")
         self.logger.debug("Trying to delete knowledge")
         drop_statement = text(f"DROP TABLE IF EXISTS {self.collection_name};")
         self.Base.metadata.remove(self.collection_table)
@@ -188,6 +219,77 @@ class MyAnalyticDB(AnalyticDB, VectorStore):
         self.collection_name = collection_name
         self.collection_table, table_is_exist = self.create_table_if_not_exists()
 
+    def delete(self, ids: Optional[List[str]] = None, **kwargs: Any) -> Optional[bool]:
+        """Delete by vector IDs.
+
+        Args:
+            ids: List of ids to delete.
+        """
+        if self.collection_table is None:
+            raise Exception("尚未绑定知识库")
+        if ids is None:
+            raise ValueError("No ids provided to delete.")
+
+        try:
+            with self.engine.connect() as conn:
+                with conn.begin():
+                    delete_condition = self.collection_table.c.id.in_(ids)
+                    conn.execute(self.collection_table.delete().where(delete_condition))
+                    return True
+        except Exception as e:
+            print("Delete operation failed:", str(e))
+            return False
+
+    def delete_doc(self, source: str or List[str]):
+        if self.collection_table is None:
+            raise Exception("尚未绑定知识库")
+        try:
+            result = []
+            # 查出文件路径等于给定的source的记录的id
+            with self.engine.connect() as conn:
+                with conn.begin():
+                    if isinstance(source, str):
+                        select_condition = self.collection_table.c.source == source
+                        # select_condition = self.collection_table.c.metadata.op("->>")("source") == source
+                        s = select(self.collection_table.c.id).where(select_condition)
+                        result = conn.execute(s).fetchall()
+                    else:
+                        for src in source:
+                            select_condition = self.collection_table.c.source == src
+                            # select_condition = self.collection_table.c.metadata.op("->>")("source") == src
+                            s = select(self.collection_table.c.id).where(select_condition)
+                            result.extend(conn.execute(s).fetchall())
+
+            ids = [i[0] for i in result]
+            if len(ids) == 0:
+                return f"docs delete fail"
+            else:
+                self.delete(ids)
+
+                # self.save_local(vs_path)
+                return f"docs delete success"
+        except Exception as e:
+            print(e)
+            return f"docs delete fail"
+
+    def update_doc(self, source, new_docs):
+        try:
+            delete_len = self.delete_doc(source)
+            ls = self.add_documents(new_docs)
+            return f"docs update success"
+        except Exception as e:
+            print(e)
+            return f"docs update fail"
+
+    def list_docs(self):
+        if self.collection_table is None:
+            raise Exception("尚未绑定知识库")
+        with self.engine.connect() as conn:
+            with conn.begin():
+                s = select(self.collection_table.c.source).group_by(self.collection_table.c.source)
+                results = conn.execute(s).fetchall()
+        return list(result[0] for result in results)
+
     def add_texts(
             self,
             texts: Iterable[str],
@@ -196,16 +298,9 @@ class MyAnalyticDB(AnalyticDB, VectorStore):
             batch_size: int = 500,
             **kwargs: Any,
     ) -> List[str]:
-        """Run more texts through the embeddings and add to the vectorstore.
+        if self.collection_table is None:
+            raise Exception("尚未绑定知识库")
 
-        Args:
-            texts: Iterable of strings to add to the vectorstore.
-            metadatas: Optional list of metadatas associated with the texts.
-            kwargs: vectorstore specific parameters
-
-        Returns:
-            List of ids from adding the texts into the vectorstore.
-        """
         if ids is None:
             ids = [str(uuid.uuid1()) for _ in texts]
 
@@ -248,42 +343,44 @@ class MyAnalyticDB(AnalyticDB, VectorStore):
 
         return ids
 
-    def similarity_search_with_score(
+    def similarity_search(
             self,
             query: str,
             k: int = 4,
             filter: Optional[dict] = None,
+            **kwargs: Any,
     ) -> List[Document]:
-        embedding = self.embedding_function.embed_query(query)
-        docs = self.my_similarity_search_with_score_by_vector_context(
-            embedding=embedding, k=k, filter=filter
+        embedding = self.embedding_function.embed_query(text=query)
+        return self.similarity_search_by_vector(
+            embedding=embedding,
+            k=k,
+            filter=filter,
         )
-        return docs
 
-    def my_similarity_search_with_score_by_vector(
+    def similarity_search_by_vector(
             self,
             embedding: List[float],
             k: int = 4,
             filter: Optional[dict] = None,
+            **kwargs: Any,
     ) -> List[Document]:
-        # results: List[Tuple[Document, distance]
-        results = self.similarity_search_with_score_by_vector(embedding=embedding, k=k, filter=filter)
+        docs_and_scores = self.my_similarity_search_with_score_by_vector_context(
+            embedding=embedding, k=k, filter=filter
+        )
+        return [doc for doc, _ in docs_and_scores]
 
-        documents = []
-        for result in results:
-            if 0 < self.score_threshold < result[1]:
-                continue
-            result[0].metadata["score"] = round(result[1], 3) if self.embedding_function is not None else None
-            documents.append(result[0])
-        return documents
-
-    # 带上下文的相似性搜索
     def my_similarity_search_with_score_by_vector_context(
             self,
             embedding: List[float],
             k: int = 4,
             filter: Optional[dict] = None,
-    ) -> List[Document]:
+    ) -> List[Tuple[Document, float]]:
+        """
+        带上下文的相似性搜索
+        """
+        if self.collection_table is None:
+            raise Exception("尚未绑定知识库")
+
         try:
             from sqlalchemy.engine import Row
         except ImportError:
@@ -322,7 +419,6 @@ class MyAnalyticDB(AnalyticDB, VectorStore):
         if min_id == None:
             min_id = 0
 
-        docs = []
         id_set = set()
         id_map = {}
         batch_size = 10  # 区间一次拓宽多少
@@ -421,6 +517,8 @@ class MyAnalyticDB(AnalyticDB, VectorStore):
         id_seqs.append(id_seq)
 
         # print("id_seqs", id_seqs)
+
+        documents_with_scores = []
         # 将一个连续的id seq拼成一个doc
         for id_seq in id_seqs:
             doc: Document = None
@@ -437,55 +535,72 @@ class MyAnalyticDB(AnalyticDB, VectorStore):
                     res = id_map[id]
                     doc.page_content += "\n" + res.document
                     doc_score = min(doc_score, res.distance)
-            if not isinstance(doc, Document):
+            if not isinstance(doc, Document) or doc_score is None:
                 raise ValueError(f"Could not find document, got {doc}")
 
+            # 和langchain不同，chatglm会多一步把score写入metadata
             doc.metadata["score"] = round(doc_score, 3)
-            docs.append(doc)
-        return docs
+            documents_with_scores.append((doc, doc_score))
+        return documents_with_scores
 
-    def delete_doc(self, source: str or List[str]):
-        try:
-            result = []
-            # 查出文件路径等于给定的source的记录的id
-            with self.engine.connect() as conn:
-                with conn.begin():
-                    if isinstance(source, str):
-                        select_condition = self.collection_table.c.source == source
-                        # select_condition = self.collection_table.c.metadata.op("->>")("source") == source
-                        s = select(self.collection_table.c.id).where(select_condition)
-                        result = conn.execute(s).fetchall()
-                    else:
-                        for src in source:
-                            select_condition = self.collection_table.c.source == src
-                            # select_condition = self.collection_table.c.metadata.op("->>")("source") == src
-                            s = select(self.collection_table.c.id).where(select_condition)
-                            result.extend(conn.execute(s).fetchall())
 
-            ids = [i[0] for i in result]
-            if len(ids) == 0:
-                return f"docs delete fail"
-            else:
-                self.delete(ids)
+    @classmethod
+    def from_texts(
+            cls: Type[MyAnalyticDB],
+            texts: List[str],
+            embedding: Embeddings,
+            metadatas: Optional[List[dict]] = None,
+            embedding_dimension: int = LANGCHAIN_DEFAULT_EMBEDDING_DIM,
+            collection_name: str = LANGCHAIN_DEFAULT_KNOWLEDGE_NAME,
+            ids: Optional[List[str]] = None,
+            pre_delete_collection: bool = False,
+            engine_args: Optional[dict] = None,
+            **kwargs: Any,
+    ) -> MyAnalyticDB:
+        """
+        Return VectorStore initialized from texts and embeddings.
+        Postgres Connection string is required
+        Either pass it as a parameter
+        or set the PG_CONNECTION_STRING environment variable.
+        """
 
-                # self.save_local(vs_path)
-                return f"docs delete success"
-        except Exception as e:
-            print(e)
-            return f"docs delete fail"
+        connection_string = cls.get_connection_string(kwargs)
 
-    def update_doc(self, source, new_docs):
-        try:
-            delete_len = self.delete_doc(source)
-            ls = self.add_documents(new_docs)
-            return f"docs update success"
-        except Exception as e:
-            print(e)
-            return f"docs update fail"
+        store = cls(
+            connection_string=connection_string,
+            embedding_function=embedding,
+            embedding_dimension=embedding_dimension,
+            pre_delete_collection=pre_delete_collection,
+            engine_args=engine_args,
+        )
 
-    def list_docs(self):
-        with self.engine.connect() as conn:
-            with conn.begin():
-                s = select(self.collection_table.c.source).group_by(self.collection_table.c.source)
-                results = conn.execute(s).fetchall()
-        return list(result[0] for result in results)
+        store.add_texts(texts=texts, metadatas=metadatas, ids=ids, **kwargs)
+        return store
+
+    @classmethod
+    def get_connection_string(cls, kwargs: Dict[str, Any]) -> str:
+        connection_string: str = get_from_dict_or_env(
+            data=kwargs,
+            key="connection_string",
+            env_key="PG_CONNECTION_STRING",
+        )
+
+        if not connection_string:
+            raise ValueError(
+                "Postgres connection string is required"
+                "Either pass it as a parameter"
+                "or set the PG_CONNECTION_STRING environment variable."
+            )
+        return connection_string
+    @classmethod
+    def connection_string_from_db_params(
+            cls,
+            driver: str,
+            host: str,
+            port: int,
+            database: str,
+            user: str,
+            password: str,
+    ) -> str:
+        """Return connection string from database parameters."""
+        return f"postgresql+{driver}://{user}:{password}@{host}:{port}/{database}"

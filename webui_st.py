@@ -66,11 +66,11 @@ def get_answer(query, vs_path, history, mode, score_threshold=VECTOR_SEARCH_SCOR
             yield history, ""
     elif mode == "知识库测试":
         if os.path.exists(vs_path):
-            resp, prompt = local_doc_qa.get_knowledge_based_conent_test(query=query, vs_path=vs_path,
-                                                                        score_threshold=score_threshold,
-                                                                        vector_search_top_k=vector_search_top_k,
-                                                                        chunk_conent=chunk_conent,
-                                                                        chunk_size=chunk_size)
+            resp, prompt = local_doc_qa.get_knowledge_based_content_test(query=query, vs_path=vs_path,
+                                                                         score_threshold=score_threshold,
+                                                                         vector_search_top_k=vector_search_top_k,
+                                                                         chunk_conent=chunk_conent,
+                                                                         chunk_size=chunk_size)
             if not resp["source_documents"]:
                 yield history + [[query,
                                   "根据您的设定，没有匹配到任何内容，请确认您设置的知识相关度 Score 阈值是否过小或其他参数是否正确。"]], ""

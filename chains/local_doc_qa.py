@@ -1,7 +1,6 @@
 from langchain.embeddings.base import Embeddings
 from langchain.embeddings.huggingface import HuggingFaceEmbeddings
 from vectorstores import MyFAISS, MyAnalyticDB
-from langchain.vectorstores.analyticdb import AnalyticDB
 from langchain.document_loaders import UnstructuredFileLoader, TextLoader, CSVLoader
 from configs.model_config import *
 from textsplitter import ChineseTextSplitter
@@ -21,7 +20,7 @@ def _embeddings_hash(self):
 
 HuggingFaceEmbeddings.__hash__ = _embeddings_hash
 
-CONNECTION_STRING = AnalyticDB.connection_string_from_db_params(
+CONNECTION_STRING = MyAnalyticDB.connection_string_from_db_params(
     driver=os.environ.get("PG_DRIVER", "psycopg2"),
     host=os.environ.get("PG_HOST", "localhost"),
     port=int(os.environ.get("PG_PORT", "5432")),
@@ -138,9 +137,8 @@ class LocalDocQA:
                  ):
         self.embeddings: Embeddings = HuggingFaceEmbeddings(model_name=embedding_model_dict[embedding_model],
                                                             model_kwargs={'device': embedding_device})
-        self.myAnalyticDB = MyAnalyticDB(collection_name=LANGCHAIN_DEFAULT_KNOWLEDGE_NAME,
-                                         embedding_function=self.embeddings,
-                                         connection_string=CONNECTION_STRING, pre_get_collection=False,
+        self.myAnalyticDB = MyAnalyticDB(embedding_function=self.embeddings,
+                                         connection_string=CONNECTION_STRING,
                                          pre_delete_collection=False)
 
     def init_cfg(self,
@@ -153,9 +151,8 @@ class LocalDocQA:
         self.embeddings: Embeddings = HuggingFaceEmbeddings(model_name=embedding_model_dict[embedding_model],
                                                             model_kwargs={'device': embedding_device})
         self.top_k = top_k
-        self.myAnalyticDB = MyAnalyticDB(collection_name=LANGCHAIN_DEFAULT_KNOWLEDGE_NAME,
-                                         embedding_function=self.embeddings,
-                                         connection_string=CONNECTION_STRING, pre_get_collection=False,
+        self.myAnalyticDB = MyAnalyticDB(embedding_function=self.embeddings,
+                                         connection_string=CONNECTION_STRING,
                                          pre_delete_collection=False)
 
     def load_vector_store(self, knowledge_name):
@@ -254,7 +251,7 @@ class LocalDocQA:
         vector_store.chunk_size = self.chunk_size
         vector_store.chunk_conent = self.chunk_conent
         vector_store.score_threshold = self.score_threshold
-        related_docs_with_score = vector_store.similarity_search_with_score(query, k=self.top_k)
+        related_docs_with_score = vector_store.similarity_search(query, k=self.top_k)
         torch_gc()
         if len(related_docs_with_score) > 0:
             prompt = generate_prompt(related_docs_with_score, query)
@@ -279,9 +276,9 @@ class LocalDocQA:
     # score_threshold    搜索匹配score阈值
     # vector_search_top_k   搜索知识库内容条数，默认搜索5条结果
     # chunk_sizes    匹配单段内容的连接上下文长度
-    def get_knowledge_based_conent_test(self, query, knowledge_name, chunk_conent,
-                                        score_threshold=VECTOR_SEARCH_SCORE_THRESHOLD,
-                                        vector_search_top_k=VECTOR_SEARCH_TOP_K, chunk_size=CHUNK_SIZE):
+    def get_knowledge_based_content_test(self, query, knowledge_name, chunk_conent,
+                                         score_threshold=VECTOR_SEARCH_SCORE_THRESHOLD,
+                                         vector_search_top_k=VECTOR_SEARCH_TOP_K, chunk_size=CHUNK_SIZE):
         if not knowledge_name:
             logger.error("知识库名称错误")
             return None
@@ -289,7 +286,7 @@ class LocalDocQA:
         vector_store.chunk_conent = chunk_conent
         vector_store.score_threshold = score_threshold
         vector_store.chunk_size = chunk_size
-        related_docs_with_score = vector_store.similarity_search_with_score(query, k=vector_search_top_k)
+        related_docs_with_score = vector_store.similarity_search(query, k=vector_search_top_k)
         if not related_docs_with_score:
             response = {"query": query,
                         "source_documents": []}

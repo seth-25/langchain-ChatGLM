@@ -61,11 +61,11 @@ def get_answer(query, knowledge_name, history, mode, score_threshold=VECTOR_SEAR
             yield history, ""
     elif mode == "知识库测试":
         if local_doc_qa.check_knowledge_in_collections(knowledge_name):
-            resp, prompt = local_doc_qa.get_knowledge_based_conent_test(query=query, knowledge_name=knowledge_name,
-                                                                        score_threshold=score_threshold,
-                                                                        vector_search_top_k=vector_search_top_k,
-                                                                        chunk_conent=chunk_conent,
-                                                                        chunk_size=chunk_size)
+            resp, prompt = local_doc_qa.get_knowledge_based_content_test(query=query, knowledge_name=knowledge_name,
+                                                                         score_threshold=score_threshold,
+                                                                         vector_search_top_k=vector_search_top_k,
+                                                                         chunk_conent=chunk_conent,
+                                                                         chunk_size=chunk_size)
             if not resp["source_documents"]:
                 yield history + [[query,
                                   "根据您的设定，没有匹配到任何内容，请确认您设置的知识距离 Score 阈值是否过小或其他参数是否正确。"]], ""
