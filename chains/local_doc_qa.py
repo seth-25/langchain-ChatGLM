@@ -84,10 +84,10 @@ def load_file(filepath, sentence_size=SENTENCE_SIZE, using_zh_title_enhance=ZH_T
         docs = zh_title_enhance(docs)
     # write_check_file(filepath, docs)
 
-    # print("doc ===========================")
-    # for doc in docs:
-    #     print(doc)
-    # print("doc ===========================")
+    print("doc ===========================")
+    for doc in docs:
+        print(doc)
+    print("doc ===========================")
     return docs
 
 
@@ -172,6 +172,7 @@ class LocalDocQA:
         print(f"初始化 {knowledge_name}")
         loaded_files = []
         failed_files = []
+        docs = []
         if isinstance(filepath, str):
             if not os.path.exists(filepath):
                 print("路径不存在")
@@ -224,12 +225,12 @@ class LocalDocQA:
 
             return None, loaded_files
 
-    def one_knowledge_add(self, knowledge_name, one_title, one_conent, one_content_segmentation, sentence_size):
+    def one_knowledge_add(self, knowledge_name, one_title, one_content, one_content_segmentation, sentence_size):
         try:
-            if not knowledge_name or not one_title or not one_conent:
+            if not knowledge_name or not one_title or not one_content:
                 logger.info("知识库添加错误，请确认知识库名字、标题、内容是否正确！")
                 return None, [one_title]
-            docs = [Document(page_content=one_conent + "\n", metadata={"source": one_title})]
+            docs = [Document(page_content=one_content + "\n", metadata={"source": one_title})]
             if not one_content_segmentation:
                 text_splitter = ChineseTextSplitter(pdf=False, sentence_size=sentence_size)
                 docs = text_splitter.split_documents(docs)
@@ -315,11 +316,11 @@ class LocalDocQA:
             yield response, history
 
     def delete_file_from_vector_store(self,
-                                      filepath: str or List[str],
+                                      filename: str or List[str],
                                       knowledge_name):
-        print(f"删除 {knowledge_name} 的文件 {filepath}")
+        print(f"删除 {knowledge_name} 的文件 {filename}")
         vector_store = self.load_vector_store(knowledge_name)
-        status = vector_store.delete_doc(filepath)
+        status = vector_store.delete_doc(filename)
         return status
 
     def update_file_from_vector_store(self,
@@ -335,18 +336,14 @@ class LocalDocQA:
         return status
 
     def list_file_from_vector_store(self,
-                                    knowledge_name,
-                                    fullpath=False):
+                                    knowledge_name):
         print(f"列出 {knowledge_name} 内的文件")
         if not knowledge_name:
             logger.error("知识库名称错误")
             return None
         vector_store = self.load_vector_store(knowledge_name)
         docs = vector_store.list_docs()
-        if fullpath:
-            return docs
-        else:
-            return [os.path.split(doc)[-1] for doc in docs]
+        return docs
 
     def check_knowledge_in_collections(self, knowledge_name):
         print(f"检查 {knowledge_name} 是否存在")

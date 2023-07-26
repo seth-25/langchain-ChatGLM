@@ -89,6 +89,8 @@ class MyAnalyticDB(VectorStore):
         if self.pre_delete_collection:
             self.delete_collection()
         self.__collections_set = self.create_collections_if_not_exists()
+
+        # 初始化MyAnalyticDB不创建collection的Table和绑定self.collection_table，由用户调用接口创建，或者set collection_name时创建
         # self.collection_table, table_is_exist = self.create_table_if_not_exists()
 
     def create_collections_if_not_exists(self) -> Table:
@@ -125,7 +127,7 @@ class MyAnalyticDB(VectorStore):
 
     def create_table_if_not_exists(self, collection_name=None) -> [Table, bool]:
         """
-        返回创建的Table对象和bool类型的table_is_exist，用于判断创建的表是否存在
+        返回创建的Table对象和bool类型的table_is_exist，table_is_exist用于判断创建的表是否存在
         """
         if collection_name is None:
             collection_name = self.__collection_name
@@ -141,7 +143,7 @@ class MyAnalyticDB(VectorStore):
             Column("embedding", ARRAY(REAL)),
             Column("document", String, nullable=True),
             Column("metadata", JSON, nullable=True),
-            Column("source", TEXT, nullable=True),
+            Column("source", TEXT, nullable=True),  # 存的是filename
             extend_existing=True,
         )
         table_is_exist = True
@@ -248,13 +250,13 @@ class MyAnalyticDB(VectorStore):
             with self.engine.connect() as conn:
                 with conn.begin():
                     if isinstance(source, str):
-                        select_condition = self.__collection_table.c.source == source
+                        select_condition = self.__collection_table.c.source == self.get_filename_from_source(source)
                         # select_condition = self.collection_table.c.metadata.op("->>")("source") == source
                         s = select(self.__collection_table.c.id).where(select_condition)
                         result = conn.execute(s).fetchall()
                     else:
                         for src in source:
-                            select_condition = self.__collection_table.c.source == src
+                            select_condition = self.__collection_table.c.source == self.get_filename_from_source(src)
                             # select_condition = self.collection_table.c.metadata.op("->>")("source") == src
                             s = select(self.__collection_table.c.id).where(select_condition)
                             result.extend(conn.execute(s).fetchall())
@@ -289,6 +291,12 @@ class MyAnalyticDB(VectorStore):
                 results = conn.execute(s).fetchall()
         return list(result[0] for result in results)
 
+    def get_filename_from_source(self, file_source):
+        """
+        从文件路径名称中获取文件名
+        """
+        return os.path.split(file_source)[-1]
+
     def add_texts(
             self,
             texts: Iterable[str],
@@ -308,17 +316,17 @@ class MyAnalyticDB(VectorStore):
         if not metadatas:
             metadatas = [{} for _ in texts]
 
-        # 导入的文件metadata必须要有source，才可以显示和删除
+        # 导入的文件metadata必须要有source，才可以显示文件的filename和根据filename删除文件
         try:
-            sources = [metadata["source"] for metadata in metadatas]
+            filenames = [self.get_filename_from_source(metadata["source"]) for metadata in metadatas]
         except KeyError:
-            raise KeyError("导入的文本没有source，请检查load_file")
+            raise KeyError("导入的文本没有source，请检查load_file调用的textsplitter")
 
         chunks_table_data = []
         with self.engine.connect() as conn:
             with conn.begin():
-                for document, metadata, chunk_id, embedding, source in zip(
-                        texts, metadatas, ids, embeddings, sources
+                for document, metadata, chunk_id, embedding, filename in zip(
+                        texts, metadatas, ids, embeddings, filenames
                 ):
                     chunks_table_data.append(
                         {
@@ -326,7 +334,7 @@ class MyAnalyticDB(VectorStore):
                             "embedding": embedding,
                             "document": document,
                             "metadata": metadata,
-                            "source": source,
+                            "source": filename,
                         }
                     )
 
@@ -413,9 +421,9 @@ class MyAnalyticDB(VectorStore):
                 results: Sequence[Row] = conn.execute(text(sql_query), params).fetchall()
                 max_id = conn.execute(select(func.max(self.__collection_table.c.id))).first()[0]  # 获得id最大最小值，以确定区间范围
                 min_id = conn.execute(select(func.min(self.__collection_table.c.id))).first()[0]
-        if max_id == None:
+        if max_id is None:
             max_id = 0
-        if min_id == None:
+        if min_id is None:
             min_id = 0
 
         id_set = set()
