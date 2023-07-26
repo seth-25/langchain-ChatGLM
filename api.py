@@ -109,6 +109,9 @@ async def create_knowledge(
     if not validate_kb_name(knowledge_base_id):
         return BaseResponse(code=403, msg="Don't attack me", data=[])
     table_is_exist = local_doc_qa.create_knowledge_vector_store(knowledge_base_id)
+    saved_path = get_doc_path(knowledge_base_id)
+    if not os.path.exists(saved_path):
+        os.makedirs(saved_path)
     if table_is_exist:
         return BaseResponse(code=200, msg="知识库已经存在")
     else:
