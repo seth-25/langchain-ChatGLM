@@ -33,15 +33,16 @@ flag_csv_logger = gr.CSVLogger()
 
 
 def get_answer(query, knowledge_name, history, mode, score_threshold=VECTOR_SEARCH_SCORE_THRESHOLD,
-               vector_search_top_k=VECTOR_SEARCH_TOP_K, chunk_conent: bool = True,
+               vector_search_top_k=VECTOR_SEARCH_TOP_K, chunk_content: bool = True,
                chunk_size=CHUNK_SIZE, streaming: bool = STREAMING):
+    print("chunk_content", chunk_content, "chunk_size", chunk_size)
     if mode == "Bing搜索问答":
         for resp, history in local_doc_qa.get_search_result_based_answer(
                 query=query, chat_history=history, streaming=streaming):
             source = "\n\n"
             source += "".join(
                 [
-                    f"""<details> <summary>出处 [{i + 1}] <a href="{doc.metadata["source"]}" target="_blank">{doc.metadata["source"]}</a> </summary>\n"""
+                    f"""<details> <summary>【出处 [{i + 1}]】 <a href="{doc.metadata["source"]}" target="_blank">{doc.metadata["source"]}</a> </summary>\n"""
                     f"""{doc.page_content}\n"""
                     f"""</details>"""
                     for i, doc in
@@ -51,12 +52,13 @@ def get_answer(query, knowledge_name, history, mode, score_threshold=VECTOR_SEAR
     elif mode == "知识库问答" and local_doc_qa.check_knowledge_in_collections(knowledge_name):
         for resp, history in local_doc_qa.get_knowledge_based_answer(
                 query=query, knowledge_name=knowledge_name, chat_history=history, streaming=streaming):
-            source = "\n\n"
+            source = "+"
             for i, doc in enumerate(resp["source_documents"]):
                 doc_page_content = doc.page_content.replace('\n', '<br>')
-                source += f"""<details> <summary>出处 [{i + 1}] {os.path.split(doc.metadata["source"])[-1]} \t 距离 {doc.metadata['score']}</summary>\n """
-                source += f"""{doc_page_content}\n"""
+                source += f"""<details> <summary>【出处{i + 1}】：{os.path.split(doc.metadata["source"])[-1]} &nbsp;&nbsp;&nbsp; 【距离】：{doc.metadata['score']}</summary>"""
+                source += f"""{doc_page_content}"""
                 source += f"""</details>"""
+            # print("history", history)
             history[-1][-1] += source
             yield history, ""
     elif mode == "知识库测试":
@@ -64,19 +66,18 @@ def get_answer(query, knowledge_name, history, mode, score_threshold=VECTOR_SEAR
             resp, prompt = local_doc_qa.get_knowledge_based_content_test(query=query, knowledge_name=knowledge_name,
                                                                          score_threshold=score_threshold,
                                                                          vector_search_top_k=vector_search_top_k,
-                                                                         chunk_conent=chunk_conent,
+                                                                         chunk_content=chunk_content,
                                                                          chunk_size=chunk_size)
             if not resp["source_documents"]:
                 yield history + [[query,
                                   "根据您的设定，没有匹配到任何内容，请确认您设置的知识距离 Score 阈值是否过小或其他参数是否正确。"]], ""
             else:
-                source = "\n".join(
-                    [
-                        f"""<details open> <summary>【知识距离 Score】：{doc.metadata["score"]} - 【出处{i + 1}】：  {os.path.split(doc.metadata["source"])[-1]} </summary>\n"""
-                        f"""{doc.page_content}\n"""
-                        f"""</details>"""
-                        for i, doc in
-                        enumerate(resp["source_documents"])])
+                source = ""
+                for i, doc in enumerate(resp["source_documents"]):
+                    doc_page_content = doc.page_content.replace('\n', '<br>')
+                    source += f"""<details> <summary>【出处{i + 1}】：{os.path.split(doc.metadata["source"])[-1]} &nbsp;&nbsp;&nbsp; 【距离】：{doc.metadata['score']}</summary>"""
+                    source += f"""{doc_page_content}"""
+                    source += f"""</details>"""
                 history.append([query, "以下内容为知识库中满足设置条件的匹配结果：\n\n" + source])
                 yield history, ""
         else:
@@ -154,7 +155,7 @@ def get_vector_store(knowledge_name, files, sentence_size, history, one_content,
                 if filename in knowledge_files:  # 文件已在知识库存在
                     continue
                 file_path = os.path.join(KB_ROOT_PATH, filename)
-                shutil.move(file.name, file_path)   # 将文件上传到服务器
+                shutil.move(file.name, file_path)  # 将文件上传到服务器
                 # print("webui list", filename, file.name)
                 file_path_list.append(file_path)
             if len(file_path_list) > 0:
@@ -226,17 +227,17 @@ def change_mode(mode, history):
         return gr.update(visible=False), gr.update(visible=False), history
 
 
-def change_chunk_conent(mode, label_conent, history):
-    conent = ""
-    if "chunk_conent" in label_conent:
-        conent = "搜索结果上下文关联"
-    elif "one_content_segmentation" in label_conent:  # 这里没用上，可以先留着
-        conent = "内容分段入库"
+def change_chunk_content(mode, label_content, history):
+    content = ""
+    if "chunk_content" in label_content:
+        content = "搜索结果上下文关联"
+    elif "one_content_segmentation" in label_content:  # 这里没用上，可以先留着
+        content = "内容分段入库"
 
     if mode:
-        return gr.update(visible=True), history + [[None, f"【已开启{conent}】"]]
+        return gr.update(visible=True), history + [[None, f"【已开启{content}】"]]
     else:
-        return gr.update(visible=False), history + [[None, f"【已关闭{conent}】"]]
+        return gr.update(visible=False), history + [[None, f"【已关闭{content}】"]]
 
 
 def add_vs_name(knowledge_name, chatbot):
@@ -279,8 +280,8 @@ def reinit_vector_store(knowledge_name, history):
 
 
 def refresh_vs_list():
-    # print("start refresh", gr.update(choices=get_vs_list()), gr.update(choices=get_vs_list()))
-    return gr.update(choices=get_vs_list()), gr.update(choices=get_vs_list())
+    knowledge_list = get_vs_list()
+    return gr.update(choices=knowledge_list), gr.update(choices=knowledge_list)
 
 
 def delete_file(knowledge_name, files_to_delete, chatbot):
@@ -462,15 +463,16 @@ with gr.Blocks(css=block_css, theme=gr.themes.Default(**default_theme_args)) as 
                                                 interactive=True)
                     vector_search_top_k = gr.Number(value=VECTOR_SEARCH_TOP_K, precision=0,
                                                     label="获取知识库内容条数", interactive=True)
-                    chunk_conent = gr.Checkbox(value=False,
-                                               label="是否启用上下文关联",
-                                               interactive=True)
+                    chunk_content = gr.Checkbox(value=False,
+                                                label="是否启用上下文关联",
+                                                interactive=True)
                     chunk_sizes = gr.Number(value=CHUNK_SIZE, precision=0,
                                             label="匹配单段内容的连接上下文后最大长度",
                                             interactive=True, visible=False)
-                    chunk_conent.change(fn=change_chunk_conent,
-                                        inputs=[chunk_conent, gr.Textbox(value="chunk_conent", visible=False), chatbot],
-                                        outputs=[chunk_sizes, chatbot])
+                    chunk_content.change(fn=change_chunk_content,
+                                         inputs=[chunk_content, gr.Textbox(value="chunk_content", visible=False),
+                                                 chatbot],
+                                         outputs=[chunk_sizes, chatbot])
                 with vs_setting:
                     vs_refresh = gr.Button("更新已有知识库选项")
                     select_vs_test = gr.Dropdown(get_vs_list(),
@@ -535,7 +537,7 @@ with gr.Blocks(css=block_css, theme=gr.themes.Default(**default_theme_args)) as 
                     flag_csv_logger.setup([query, knowledge_name, chatbot, mode], "flagged")
                     query.submit(get_answer,
                                  [query, knowledge_name, chatbot, mode, score_threshold, vector_search_top_k,
-                                  chunk_conent,
+                                  chunk_content,
                                   chunk_sizes],
                                  [chatbot, query])
     with gr.Tab("模型配置"):
@@ -568,9 +570,7 @@ with gr.Blocks(css=block_css, theme=gr.themes.Default(**default_theme_args)) as 
         load_model_button.click(reinit_model, show_progress=True,
                                 inputs=[llm_model, embedding_model, llm_history_len, no_remote_model, use_ptuning_v2,
                                         use_lora, top_k, chatbot], outputs=chatbot)
-        # load_knowlege_button = gr.Button("重新构建知识库")
-        # load_knowlege_button.click(reinit_vector_store, show_progress=True,
-        #                            inputs=[select_vs, chatbot], outputs=chatbot)
+
     demo.load(
         fn=refresh_vs_list,
         inputs=None,

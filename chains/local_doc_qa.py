@@ -84,10 +84,10 @@ def load_file(filepath, sentence_size=SENTENCE_SIZE, using_zh_title_enhance=ZH_T
         docs = zh_title_enhance(docs)
     # write_check_file(filepath, docs)
 
-    print("doc ===========================")
-    for doc in docs:
-        print(doc)
-    print("doc ===========================")
+    # print("doc ===========================")
+    # for doc in docs:
+    #     print(doc)
+    # print("doc ===========================")
     return docs
 
 
@@ -273,18 +273,18 @@ class LocalDocQA:
 
     # query      查询内容
     # vs_path    知识库路径
-    # chunk_conent   是否启用上下文关联
+    # chunk_content   是否启用上下文关联
     # score_threshold    搜索匹配score阈值
     # vector_search_top_k   搜索知识库内容条数，默认搜索5条结果
     # chunk_sizes    匹配单段内容的连接上下文长度
-    def get_knowledge_based_content_test(self, query, knowledge_name, chunk_conent,
+    def get_knowledge_based_content_test(self, query, knowledge_name, chunk_content,
                                          score_threshold=VECTOR_SEARCH_SCORE_THRESHOLD,
                                          vector_search_top_k=VECTOR_SEARCH_TOP_K, chunk_size=CHUNK_SIZE):
         if not knowledge_name:
             logger.error("知识库名称错误")
             return None
         vector_store = self.load_vector_store(knowledge_name)
-        vector_store.chunk_conent = chunk_conent
+        vector_store.chunk_content = chunk_content
         vector_store.score_threshold = score_threshold
         vector_store.chunk_size = chunk_size
         related_docs_with_score = vector_store.similarity_search(query, k=vector_search_top_k)

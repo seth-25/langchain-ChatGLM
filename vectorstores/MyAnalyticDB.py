@@ -58,6 +58,7 @@ class MyAnalyticDB(VectorStore):
         self.__base = Base
 
         self.score_threshold = VECTOR_SEARCH_SCORE_THRESHOLD
+        self.chunk_content = True
         self.chunk_size = CHUNK_SIZE
 
         self.__post_init__(engine_args)
@@ -90,7 +91,7 @@ class MyAnalyticDB(VectorStore):
             self.delete_collection()
         self.__collections_set = self.create_collections_if_not_exists()
 
-        # 初始化MyAnalyticDB不创建collection的Table和绑定self.collection_table，由用户调用接口创建，或者set collection_name时创建
+        # 初始化MyAnalyticDB不创建collection的Table和绑定self.collection_table，由用户调用接口创建，或者set_collection_name时创建
         # self.collection_table, table_is_exist = self.create_table_if_not_exists()
 
     def create_collections_if_not_exists(self) -> Table:
@@ -109,7 +110,7 @@ class MyAnalyticDB(VectorStore):
         return collections_table
 
     def check_collection_if_exists(self, collection_name) -> bool:
-        # Check if the collection in collections set
+        """ Check if the collection in collections set """
         with self.engine.connect() as conn:
             with conn.begin():
                 collection_query = text(
@@ -126,13 +127,11 @@ class MyAnalyticDB(VectorStore):
             return False
 
     def create_table_if_not_exists(self, collection_name=None) -> [Table, bool]:
-        """
-        返回创建的Table对象和bool类型的table_is_exist，table_is_exist用于判断创建的表是否存在
-        """
+        """ 返回创建的Table对象和bool类型的table_is_exist，table_is_exist用于判断创建的表是否存在 """
         if collection_name is None:
             collection_name = self.__collection_name
         if collection_name == LANGCHAIN_DEFAULT_COLLECTIONS_NAME:
-            raise Exception(f"知识库表名不能和统计知识库的表名{LANGCHAIN_DEFAULT_COLLECTIONS_NAME}相同")
+            raise Exception(f"知识库名不能和统计知识库的表名{LANGCHAIN_DEFAULT_COLLECTIONS_NAME}相同")
 
         # Define the dynamic collection embedding table
         collection_table = Table(
@@ -222,7 +221,6 @@ class MyAnalyticDB(VectorStore):
 
     def delete(self, ids: Optional[List[str]] = None, **kwargs: Any) -> Optional[bool]:
         """Delete by vector IDs.
-
         Args:
             ids: List of ids to delete.
         """
@@ -364,6 +362,43 @@ class MyAnalyticDB(VectorStore):
             filter=filter,
         )
 
+    def get_search_result_from_database(self,
+                                        embedding: List[float],
+                                        k: int = 4,
+                                        filter: Optional[dict] = None,
+                                        ):
+        try:
+            from sqlalchemy.engine import Row
+        except ImportError:
+            raise ImportError(
+                "Could not import Row from sqlalchemy.engine. "
+                "Please 'pip install sqlalchemy>=1.4'."
+            )
+            # Add the filter if provided
+        filter_condition = ""
+        if filter is not None:
+            conditions = [
+                f"metadata->>{key!r} = {value!r}" for key, value in filter.items()
+            ]
+            filter_condition = f"WHERE {' AND '.join(conditions)}"
+
+        # Define the base query
+        sql_query = f"""
+                SELECT *, l2_distance(embedding, :embedding) as distance
+                FROM {self.__collection_name}
+                {filter_condition}
+                ORDER BY embedding <-> :embedding
+                LIMIT :k
+            """
+
+        # Set up the query parameters
+        params = {"embedding": embedding, "k": k}
+
+        # Execute the query and fetch the results
+        with self.engine.connect() as conn:
+            results: Sequence[Row] = conn.execute(text(sql_query), params).fetchall()
+        return results
+
     def similarity_search_by_vector(
             self,
             embedding: List[float],
@@ -371,10 +406,45 @@ class MyAnalyticDB(VectorStore):
             filter: Optional[dict] = None,
             **kwargs: Any,
     ) -> List[Document]:
-        docs_and_scores = self.my_similarity_search_with_score_by_vector_context(
-            embedding=embedding, k=k, filter=filter
-        )
+        if self.__collection_table is None:
+            raise Exception("尚未绑定知识库")
+        if self.chunk_content:  # 使用上下文
+            docs_and_scores = self.my_similarity_search_with_score_by_vector_context(
+                embedding=embedding, k=k, filter=filter
+            )
+        else:
+            docs_and_scores = self.similarity_search_with_score_by_vector(
+                embedding=embedding, k=k, filter=filter
+            )
+        print("docs_and_scores", docs_and_scores)
         return [doc for doc, _ in docs_and_scores]
+
+    def similarity_search_with_score_by_vector(
+            self,
+            embedding: List[float],
+            k: int = 4,
+            filter: Optional[dict] = None,
+    ) -> List[Tuple[Document, float]]:
+        """
+        不带上下文的相似性搜索
+        """
+        if self.__collection_table is None:
+            raise Exception("尚未绑定知识库")
+        results = self.get_search_result_from_database(embedding, k, filter)
+
+        documents_with_scores = []
+        for result in results:
+            if 0 < self.score_threshold < result.distance:
+                continue
+            result.metadata["score"] = int(result.distance) if self.embedding_function is not None else None
+            documents_with_scores.append((
+                Document(
+                    page_content=result.document,
+                    metadata=result.metadata,
+                ),
+                result.distance
+            ))
+        return documents_with_scores
 
     def my_similarity_search_with_score_by_vector_context(
             self,
@@ -388,37 +458,11 @@ class MyAnalyticDB(VectorStore):
         if self.__collection_table is None:
             raise Exception("尚未绑定知识库")
 
-        try:
-            from sqlalchemy.engine import Row
-        except ImportError:
-            raise ImportError(
-                "Could not import Row from sqlalchemy.engine. "
-                "Please 'pip install sqlalchemy>=1.4'."
-            )
-
-        filter_condition = ""
-        if filter is not None:
-            conditions = [
-                f"metadata->>{key!r} = {value!r}" for key, value in filter.items()
-            ]
-            filter_condition = f"WHERE {' AND '.join(conditions)}"
-
-        # Define the base query
-        sql_query = f"""
-                  SELECT *, l2_distance(embedding, :embedding) as distance
-                  FROM {self.__collection_name}
-                  {filter_condition}
-                  ORDER BY embedding <-> :embedding
-                  LIMIT :k
-              """
-
-        # Set up the query parameters
-        params = {"embedding": embedding, "k": k}
-
         # Execute the query and fetch the results
+        results = self.get_search_result_from_database(embedding, k, filter)
+
         with self.engine.connect() as conn:
             with conn.begin():
-                results: Sequence[Row] = conn.execute(text(sql_query), params).fetchall()
                 max_id = conn.execute(select(func.max(self.__collection_table.c.id))).first()[0]  # 获得id最大最小值，以确定区间范围
                 min_id = conn.execute(select(func.min(self.__collection_table.c.id))).first()[0]
         if max_id is None:
