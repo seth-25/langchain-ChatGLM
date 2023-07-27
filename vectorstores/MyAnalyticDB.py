@@ -416,7 +416,6 @@ class MyAnalyticDB(VectorStore):
             docs_and_scores = self.similarity_search_with_score_by_vector(
                 embedding=embedding, k=k, filter=filter
             )
-        print("docs_and_scores", docs_and_scores)
         return [doc for doc, _ in docs_and_scores]
 
     def similarity_search_with_score_by_vector(
@@ -436,7 +435,7 @@ class MyAnalyticDB(VectorStore):
         for result in results:
             if 0 < self.score_threshold < result.distance:
                 continue
-            result.metadata["score"] = int(result.distance) if self.embedding_function is not None else None
+            result.metadata["score"] = round(result.distance, 3) if self.embedding_function is not None else None
             documents_with_scores.append((
                 Document(
                     page_content=result.document,
@@ -554,7 +553,7 @@ class MyAnalyticDB(VectorStore):
 
         if len(id_set) == 0:
             return []
-        print("id_set", id_set)
+        # print("id_set", id_set)
         id_list = sorted(list(id_set))
         # 连续的id分在一起，成为一个id seq
         id_seqs = []  # 存一个个连续的id seq

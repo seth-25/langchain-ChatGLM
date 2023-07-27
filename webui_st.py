@@ -51,10 +51,11 @@ def get_answer(query, vs_path, history, mode, score_threshold=VECTOR_SEARCH_SCOR
             yield history, ""
     elif mode == "知识库问答" and vs_path is not None and os.path.exists(vs_path):
         local_doc_qa.top_k = vector_search_top_k
-        local_doc_qa.chunk_conent = chunk_conent
+        local_doc_qa.chunk_content = chunk_conent
         local_doc_qa.chunk_size = chunk_size
+        local_doc_qa.score_threshold = score_threshold
         for resp, history in local_doc_qa.get_knowledge_based_answer(
-                query=query, vs_path=vs_path, chat_history=history, streaming=streaming):
+                query=query, knowledge_name=vs_path, chat_history=history, streaming=streaming):
             source = "\n\n"
             source += "".join(
                 [f"""<details> <summary>出处 [{i + 1}] {os.path.split(doc.metadata["source"])[-1]}</summary>\n"""
@@ -66,11 +67,7 @@ def get_answer(query, vs_path, history, mode, score_threshold=VECTOR_SEARCH_SCOR
             yield history, ""
     elif mode == "知识库测试":
         if os.path.exists(vs_path):
-            resp, prompt = local_doc_qa.get_knowledge_based_content_test(query=query, vs_path=vs_path,
-                                                                         score_threshold=score_threshold,
-                                                                         vector_search_top_k=vector_search_top_k,
-                                                                         chunk_conent=chunk_conent,
-                                                                         chunk_size=chunk_size)
+            resp, prompt = local_doc_qa.get_knowledge_based_content_test(query=query, knowledge_name=vs_path)
             if not resp["source_documents"]:
                 yield history + [[query,
                                   "根据您的设定，没有匹配到任何内容，请确认您设置的知识相关度 Score 阈值是否过小或其他参数是否正确。"]], ""
@@ -345,7 +342,7 @@ with st.spinner(f"正在加载模型({llm_model} + {embedding_model})，请耐�
     )
     local_doc_qa.llm_model_chain.history_len = history_len
     if use_kb_mode(mode):
-        local_doc_qa.chunk_conent = chunk_conent
+        local_doc_qa.chunk_content = chunk_conent
         local_doc_qa.chunk_size = chunk_size
     # local_doc_qa.llm_model_chain.temperature = temperature # 这样设置temperature似乎不起作用
     st.session_state.local_doc_qa = local_doc_qa

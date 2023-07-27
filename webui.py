@@ -35,7 +35,11 @@ flag_csv_logger = gr.CSVLogger()
 def get_answer(query, knowledge_name, history, mode, score_threshold=VECTOR_SEARCH_SCORE_THRESHOLD,
                vector_search_top_k=VECTOR_SEARCH_TOP_K, chunk_content: bool = True,
                chunk_size=CHUNK_SIZE, streaming: bool = STREAMING):
-    print("chunk_content", chunk_content, "chunk_size", chunk_size)
+    # print("chunk_content", chunk_content, "chunk_size", chunk_size, "score_threshold", score_threshold, "vector_search_top_k", vector_search_top_k)
+    local_doc_qa.chunk_content = chunk_content
+    local_doc_qa.chunk_size = chunk_size
+    local_doc_qa.score_threshold = score_threshold
+    local_doc_qa.top_k = vector_search_top_k
     if mode == "Bing搜索问答":
         for resp, history in local_doc_qa.get_search_result_based_answer(
                 query=query, chat_history=history, streaming=streaming):
@@ -63,11 +67,7 @@ def get_answer(query, knowledge_name, history, mode, score_threshold=VECTOR_SEAR
             yield history, ""
     elif mode == "知识库测试":
         if local_doc_qa.check_knowledge_in_collections(knowledge_name):
-            resp, prompt = local_doc_qa.get_knowledge_based_content_test(query=query, knowledge_name=knowledge_name,
-                                                                         score_threshold=score_threshold,
-                                                                         vector_search_top_k=vector_search_top_k,
-                                                                         chunk_content=chunk_content,
-                                                                         chunk_size=chunk_size)
+            resp, prompt = local_doc_qa.get_knowledge_based_content_test(query=query, knowledge_name=knowledge_name)
             if not resp["source_documents"]:
                 yield history + [[query,
                                   "根据您的设定，没有匹配到任何内容，请确认您设置的知识距离 Score 阈值是否过小或其他参数是否正确。"]], ""
@@ -233,7 +233,6 @@ def change_chunk_content(mode, label_content, history):
         content = "搜索结果上下文关联"
     elif "one_content_segmentation" in label_content:  # 这里没用上，可以先留着
         content = "内容分段入库"
-
     if mode:
         return gr.update(visible=True), history + [[None, f"【已开启{content}】"]]
     else:
