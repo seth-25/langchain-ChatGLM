@@ -12,6 +12,8 @@ from typing import (
 
 from langchain.docstore.document import Document
 
+from configs.model_config import SENTENCE_SIZE
+
 md_headers = [
     ("#", "Header 1"),
     ("##", "Header 2"),
@@ -29,13 +31,14 @@ def md_title_enhance(docs: List[Document]) -> List[Document]:
                 if re.match("Header", key):
                     # print(key, value)
                     title_list.append(value)
-            doc.page_content = f"下文与({','.join(title_list)})有关。{doc.page_content}"
+            doc.page_content = f"【下文与({','.join(title_list)})有关】{doc.page_content}"
+
         return docs
     else:
         print("文件不存在")
 
 
-def my_md_split(filepath):
+def my_md_split(filepath, sentence_size=SENTENCE_SIZE):
     # 获取文本
     loader = TextLoader(filepath)
     markdown_document: Document = loader.load()[0]
@@ -44,8 +47,10 @@ def my_md_split(filepath):
     header_splitter = MarkdownHeaderTextSplitter(headers_to_split_on=md_headers, return_each_line=False)
     md_header_splits = header_splitter.split_text(markdown_document.page_content)
 
-    text_splitter = MarkdownTextSplitter(chunk_size=1000, chunk_overlap=50)
+    text_splitter = MarkdownTextSplitter(chunk_size=sentence_size, chunk_overlap=0)
     docs = text_splitter.split_documents(md_header_splits)
 
     docs = md_title_enhance(docs)
+    for doc in docs:
+        doc.metadata["source"] = filepath
     return docs

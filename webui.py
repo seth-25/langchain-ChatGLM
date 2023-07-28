@@ -35,7 +35,7 @@ flag_csv_logger = gr.CSVLogger()
 def get_answer(query, knowledge_name, history, mode, score_threshold=VECTOR_SEARCH_SCORE_THRESHOLD,
                vector_search_top_k=VECTOR_SEARCH_TOP_K, chunk_content: bool = True,
                chunk_size=CHUNK_SIZE, streaming: bool = STREAMING):
-    # print("chunk_content", chunk_content, "chunk_size", chunk_size, "score_threshold", score_threshold, "vector_search_top_k", vector_search_top_k)
+    print("chunk_content", chunk_content, "chunk_size", chunk_size, "score_threshold", score_threshold, "vector_search_top_k", vector_search_top_k)
     local_doc_qa.chunk_content = chunk_content
     local_doc_qa.chunk_size = chunk_size
     local_doc_qa.score_threshold = score_threshold
@@ -54,16 +54,22 @@ def get_answer(query, knowledge_name, history, mode, score_threshold=VECTOR_SEAR
             history[-1][-1] += source
             yield history, ""
     elif mode == "知识库问答" and local_doc_qa.check_knowledge_in_collections(knowledge_name):
+#         history = [[None, '欢迎使用 langchain-ChatGLM Web UI！\n\n请在右侧切换模式，目前支持直接与 LLM 模型对话或基于本地知识库问答。\n\n知识库问答模式，选择知识库名称后，即可开始问答，当前知识库新建知识库，如有需要可以在选择知识库名称后上传文件/文件夹至知识库。\n\n知识库暂不支持文件删除，该功能将在后续版本中推出。']
+# ,[None, '模型已成功加载，可以开始对话，或从右侧选择模式后开始对话']]
+        # print("知识库问答:::")
+        # for h in history:
+        #     print(h)
+        # print("知识库问答:::")
         for resp, history in local_doc_qa.get_knowledge_based_answer(
                 query=query, knowledge_name=knowledge_name, chat_history=history, streaming=streaming):
-            source = "+"
+            source = ""
             for i, doc in enumerate(resp["source_documents"]):
                 doc_page_content = doc.page_content.replace('\n', '<br>')
                 source += f"""<details> <summary>【出处{i + 1}】：{os.path.split(doc.metadata["source"])[-1]} &nbsp;&nbsp;&nbsp; 【距离】：{doc.metadata['score']}</summary>"""
                 source += f"""{doc_page_content}"""
                 source += f"""</details>"""
-            # print("history", history)
             history[-1][-1] += source
+            # print("history:", history)
             yield history, ""
     elif mode == "知识库测试":
         if local_doc_qa.check_knowledge_in_collections(knowledge_name):
@@ -84,7 +90,10 @@ def get_answer(query, knowledge_name, history, mode, score_threshold=VECTOR_SEAR
             yield history + [[query,
                               "请选择知识库后进行测试，当前未选择知识库。"]], ""
     else:
-
+        print("LLM 对话:::")
+        for h in history:
+            print(h)
+        print("LLM 对话:::")
         answer_result_stream_result = local_doc_qa.llm_model_chain(
             {"prompt": query, "history": history, "streaming": streaming})
 
@@ -147,7 +156,7 @@ def get_vector_store(knowledge_name, files, sentence_size, history, one_content,
     if local_doc_qa.llm_model_chain and local_doc_qa.embeddings:
         # print("files", files, type(files))
         knowledge_files = local_doc_qa.list_file_from_vector_store(knowledge_name)
-        print("knowledge_files", knowledge_files)
+        # print("knowledge_files", knowledge_files)
         if isinstance(files, list):
             file_path_list = []
             for file in files:
@@ -223,7 +232,7 @@ def change_mode(mode, history):
     elif mode == "知识库测试":
         return gr.update(visible=True), gr.update(visible=True), [[None,
                                                                    knowledge_base_test_mode_info]]
-    else:
+    else:   # LLM 对话，Bing搜索问答
         return gr.update(visible=False), gr.update(visible=False), history
 
 
@@ -536,8 +545,7 @@ with gr.Blocks(css=block_css, theme=gr.themes.Default(**default_theme_args)) as 
                     flag_csv_logger.setup([query, knowledge_name, chatbot, mode], "flagged")
                     query.submit(get_answer,
                                  [query, knowledge_name, chatbot, mode, score_threshold, vector_search_top_k,
-                                  chunk_content,
-                                  chunk_sizes],
+                                  chunk_content, chunk_sizes],
                                  [chatbot, query])
     with gr.Tab("模型配置"):
         llm_model = gr.Radio(llm_model_dict_list,

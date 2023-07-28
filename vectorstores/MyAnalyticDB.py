@@ -474,14 +474,13 @@ class MyAnalyticDB(VectorStore):
         batch_size = 10  # 区间一次拓宽多少
 
         for result in results:
-            # print("查询result", result)
+            # print("查询result", len(result.document), result)
             if 0 < self.score_threshold < result.distance:
                 continue
 
             id_set.add(result.id)
             id_map[result.id] = result
             docs_len = len(result.document)
-            # print("docs_len", docs_len)
 
             last_l = result.id - 1  # 上一次搜索区间范围上界的前一个
             last_r = result.id + 1  # 上一次搜索区间范围下界的下一个
@@ -543,8 +542,8 @@ class MyAnalyticDB(VectorStore):
                             docs_len += len(l_result.document)
                             id_set.add(l_result.id)
                             id_map[l_result.id] = l_result
-                #     print("docs_len", docs_len, id_set)
-                # print("docs_len", docs_len, id_set)
+                    # print("docs_len", docs_len, id_set)
+                # print("final docs_len", docs_len, id_set)
                 # print("==================================")
                 if break_flag:  # 已经添加足够的上下文，退出
                     break

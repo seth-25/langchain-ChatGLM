@@ -1,5 +1,7 @@
 from langchain.embeddings.base import Embeddings
 from langchain.embeddings.huggingface import HuggingFaceEmbeddings
+
+from textsplitter.my_markdown_splitter import my_md_split
 from vectorstores import MyFAISS, MyAnalyticDB
 from langchain.document_loaders import UnstructuredFileLoader, TextLoader, CSVLoader
 from configs.model_config import *
@@ -55,8 +57,10 @@ def tree(filepath, ignore_dir_names=None, ignore_file_names=None):
 
 def load_file(filepath, sentence_size=SENTENCE_SIZE, using_zh_title_enhance=ZH_TITLE_ENHANCE):
     if filepath.lower().endswith(".md"):
-        loader = UnstructuredFileLoader(filepath, mode="elements")
-        docs = loader.load()
+        # loader = UnstructuredFileLoader(filepath, mode="elements")
+        # docs = loader.load()
+        docs = my_md_split(filepath, sentence_size=sentence_size)
+
     elif filepath.lower().endswith(".txt"):
         loader = TextLoader(filepath, autodetect_encoding=True)
         textsplitter = ChineseTextSplitter(pdf=False, sentence_size=sentence_size)
@@ -84,10 +88,6 @@ def load_file(filepath, sentence_size=SENTENCE_SIZE, using_zh_title_enhance=ZH_T
         docs = zh_title_enhance(docs)
     # write_check_file(filepath, docs)
 
-    # print("doc ===========================")
-    # for doc in docs:
-    #     print(doc)
-    # print("doc ===========================")
     return docs
 
 
@@ -130,6 +130,7 @@ class LocalDocQA:
     chunk_size: int = CHUNK_SIZE
     chunk_content: bool = True
     score_threshold: int = VECTOR_SEARCH_SCORE_THRESHOLD
+
     def __init__(self,
                  embedding_model: str = EMBEDDING_MODEL,
                  embedding_device=EMBEDDING_DEVICE,
@@ -251,6 +252,7 @@ class LocalDocQA:
         vector_store.chunk_size = self.chunk_size
         vector_store.chunk_content = self.chunk_content
         vector_store.score_threshold = self.score_threshold
+        print("score_threshold", vector_store.score_threshold, "chunk_size", vector_store.chunk_size, "chunk_content", vector_store.chunk_content)
         related_docs_with_score = vector_store.similarity_search(query, k=self.top_k)
         torch_gc()
         if len(related_docs_with_score) > 0:
@@ -258,9 +260,15 @@ class LocalDocQA:
         else:
             prompt = query
 
+        # answer_result_stream_result：4个key的字典，prompt、history、streaming、answer_result_stream
         answer_result_stream_result = self.llm_model_chain(
             {"prompt": prompt, "history": chat_history, "streaming": streaming})
 
+        # answer_result_stream：多个AnswerResult（models/base/base.py），AnswerResult包括history(List[List[str]])和llm_output(Optional[dict])
+        # 如果streaming为True，则有多个AnswerResult，后面一个AnswerResult比前面一个多一个字符。streaming为false，只有一个AnswerResult
+        # 返回的history存的每个list都代表一轮问答，每个list有两个str，前者是prompt，后者是回答。之后将prompt替换成query，回答在webui里还会加上知识出处source。
+        # llm_output只有一个key "answer"，存了回答
+        # 具体见ChatGLMLLMChain (models/chatglm_llm.py)的_generate_answer
         for answer_result in answer_result_stream_result['answer_result_stream']:
             resp = answer_result.llm_output["answer"]
             history = answer_result.history
@@ -277,6 +285,7 @@ class LocalDocQA:
     # vector_search_top_k   搜索知识库内容条数，默认搜索5条结果
     # chunk_sizes    匹配单段内容的连接上下文长度
     def get_knowledge_based_content_test(self, query, knowledge_name):
+        print(f"测试：知识库 {knowledge_name}，问题 {query}")
         if not knowledge_name:
             logger.error("知识库名称错误")
             return None
@@ -284,6 +293,7 @@ class LocalDocQA:
         vector_store.chunk_content = self.chunk_content
         vector_store.score_threshold = self.score_threshold
         vector_store.chunk_size = self.chunk_size
+        print("score_threshold", vector_store.score_threshold, "chunk_size", vector_store.chunk_size, "chunk_content", vector_store.chunk_content)
         related_docs_with_score = vector_store.similarity_search(query, k=self.top_k)
         if not related_docs_with_score:
             response = {"query": query,
