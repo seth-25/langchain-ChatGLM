@@ -244,7 +244,7 @@ class LocalDocQA:
             return None, [one_title]
 
     def get_knowledge_based_answer(self, query, knowledge_name, chat_history=[], streaming: bool = STREAMING):
-        print(f"查询：知识库 {knowledge_name}，问题 {query}")
+        print(f"查询：知识库 {knowledge_name}，问题 {query}，历史 {chat_history}")
         if not knowledge_name:
             logger.error("知识库名称错误")
             return None
@@ -272,7 +272,7 @@ class LocalDocQA:
         for answer_result in answer_result_stream_result['answer_result_stream']:
             resp = answer_result.llm_output["answer"]
             history = answer_result.history
-            history[-1][0] = query
+            history[-1][0] = query  # 原本的history[-1][0]是prompt，现在换成query
             response = {"query": query,
                         "result": resp,
                         "source_documents": related_docs_with_score}

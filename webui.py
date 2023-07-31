@@ -32,14 +32,19 @@ local_doc_qa = LocalDocQA()
 flag_csv_logger = gr.CSVLogger()
 
 
-def get_answer(query, knowledge_name, history, mode, score_threshold=VECTOR_SEARCH_SCORE_THRESHOLD,
+def get_answer(query, knowledge_name, chatbot, history, mode, score_threshold=VECTOR_SEARCH_SCORE_THRESHOLD,
                vector_search_top_k=VECTOR_SEARCH_TOP_K, chunk_content: bool = True,
                chunk_size=CHUNK_SIZE, streaming: bool = STREAMING):
     print("chunk_content", chunk_content, "chunk_size", chunk_size, "score_threshold", score_threshold, "vector_search_top_k", vector_search_top_k)
+    print("history", history)
+    for h in history:
+        print(h)
     local_doc_qa.chunk_content = chunk_content
     local_doc_qa.chunk_size = chunk_size
     local_doc_qa.score_threshold = score_threshold
     local_doc_qa.top_k = vector_search_top_k
+
+    chatbot.append([])  # chatbot添加新的一条回答
     if mode == "Bing搜索问答":
         for resp, history in local_doc_qa.get_search_result_based_answer(
                 query=query, chat_history=history, streaming=streaming):
@@ -52,14 +57,9 @@ def get_answer(query, knowledge_name, history, mode, score_threshold=VECTOR_SEAR
                     for i, doc in
                     enumerate(resp["source_documents"])])
             history[-1][-1] += source
-            yield history, ""
+            chatbot[-1] = history[-1]
+            yield chatbot, "", history
     elif mode == "知识库问答" and local_doc_qa.check_knowledge_in_collections(knowledge_name):
-#         history = [[None, '欢迎使用 langchain-ChatGLM Web UI！\n\n请在右侧切换模式，目前支持直接与 LLM 模型对话或基于本地知识库问答。\n\n知识库问答模式，选择知识库名称后，即可开始问答，当前知识库新建知识库，如有需要可以在选择知识库名称后上传文件/文件夹至知识库。\n\n知识库暂不支持文件删除，该功能将在后续版本中推出。']
-# ,[None, '模型已成功加载，可以开始对话，或从右侧选择模式后开始对话']]
-        # print("知识库问答:::")
-        # for h in history:
-        #     print(h)
-        # print("知识库问答:::")
         for resp, history in local_doc_qa.get_knowledge_based_answer(
                 query=query, knowledge_name=knowledge_name, chat_history=history, streaming=streaming):
             source = ""
@@ -68,15 +68,15 @@ def get_answer(query, knowledge_name, history, mode, score_threshold=VECTOR_SEAR
                 source += f"""<details> <summary>【出处{i + 1}】：{os.path.split(doc.metadata["source"])[-1]} &nbsp;&nbsp;&nbsp; 【距离】：{doc.metadata['score']}</summary>"""
                 source += f"""{doc_page_content}"""
                 source += f"""</details>"""
-            history[-1][-1] += source
-            # print("history:", history)
-            yield history, ""
+            history[-1][-1] += source   # 模型答案加上出处，一起加入history中
+            chatbot[-1] = history[-1]
+            yield chatbot, "", history
     elif mode == "知识库测试":
         if local_doc_qa.check_knowledge_in_collections(knowledge_name):
             resp, prompt = local_doc_qa.get_knowledge_based_content_test(query=query, knowledge_name=knowledge_name)
             if not resp["source_documents"]:
-                yield history + [[query,
-                                  "根据您的设定，没有匹配到任何内容，请确认您设置的知识距离 Score 阈值是否过小或其他参数是否正确。"]], ""
+                chatbot[-1] = [query, "根据您的设定，没有匹配到任何内容，请确认您设置的知识距离 Score 阈值是否过小或其他参数是否正确。"]
+                yield chatbot, "", history
             else:
                 source = ""
                 for i, doc in enumerate(resp["source_documents"]):
@@ -84,16 +84,12 @@ def get_answer(query, knowledge_name, history, mode, score_threshold=VECTOR_SEAR
                     source += f"""<details> <summary>【出处{i + 1}】：{os.path.split(doc.metadata["source"])[-1]} &nbsp;&nbsp;&nbsp; 【距离】：{doc.metadata['score']}</summary>"""
                     source += f"""{doc_page_content}"""
                     source += f"""</details>"""
-                history.append([query, "以下内容为知识库中满足设置条件的匹配结果：\n\n" + source])
-                yield history, ""
+                chatbot[-1] = [query, "以下内容为知识库中满足设置条件的匹配结果：\n\n" + source]
+                yield chatbot, "", history
         else:
-            yield history + [[query,
-                              "请选择知识库后进行测试，当前未选择知识库。"]], ""
+            chatbot[-1] = [query, "请选择知识库后进行测试，当前未选择知识库。"]
+            yield chatbot, "", history
     else:
-        print("LLM 对话:::")
-        for h in history:
-            print(h)
-        print("LLM 对话:::")
         answer_result_stream_result = local_doc_qa.llm_model_chain(
             {"prompt": query, "history": history, "streaming": streaming})
 
@@ -101,7 +97,8 @@ def get_answer(query, knowledge_name, history, mode, score_threshold=VECTOR_SEAR
             resp = answer_result.llm_output["answer"]
             history = answer_result.history
             history[-1][-1] = resp
-            yield history, ""
+            chatbot[-1] = history[-1]
+            yield chatbot, "", history
     logger.info(
         f"flagging: username={FLAG_USER_NAME},query={query},knowledge_name={knowledge_name},mode={mode},history={history}")
     flag_csv_logger.flag([query, knowledge_name, history, mode], username=FLAG_USER_NAME)
@@ -135,8 +132,7 @@ def init_model():
         return reply
 
 
-def reinit_model(llm_model, embedding_model, llm_history_len, no_remote_model, use_ptuning_v2, use_lora, top_k,
-                 history):
+def reinit_model(llm_model, embedding_model, llm_history_len, no_remote_model, use_ptuning_v2, use_lora, top_k, chatbot):
     try:
         llm_model_ins = shared.loaderLLM(llm_model, no_remote_model, use_ptuning_v2)
         llm_model_ins.history_len = llm_history_len
@@ -149,10 +145,10 @@ def reinit_model(llm_model, embedding_model, llm_history_len, no_remote_model, u
         logger.error(e)
         model_status = """模型未成功重新加载，请到页面左上角"模型配置"选项卡中重新选择后点击"加载模型"按钮"""
         logger.info(model_status)
-    return history + [[None, model_status]]
+    return chatbot + [[None, model_status]]
 
 
-def get_vector_store(knowledge_name, files, sentence_size, history, one_content, one_content_segmentation):
+def get_vector_store(knowledge_name, files, sentence_size, chatbot, one_content, one_content_segmentation):
     if local_doc_qa.llm_model_chain and local_doc_qa.embeddings:
         # print("files", files, type(files))
         knowledge_files = local_doc_qa.list_file_from_vector_store(knowledge_name)
@@ -191,26 +187,26 @@ def get_vector_store(knowledge_name, files, sentence_size, history, one_content,
         file_status = "模型未完成加载，请先在加载模型后再导入文件"
         knowledge_name = None
     logger.info(file_status)
-    return knowledge_name, None, history + [[None, file_status]], \
+    return knowledge_name, None, chatbot + [[None, file_status]], \
         gr.update(choices=local_doc_qa.list_file_from_vector_store(knowledge_name) if knowledge_name else [])
 
 
-def change_vs_name_input(knowledge_name, history):
+def change_vs_name_input(knowledge_name, chatbot):
     # print("change_vs_name_input", knowledge_name, type(knowledge_name))
     if knowledge_name == "新建知识库":
-        return gr.update(visible=True), gr.update(visible=True), gr.update(visible=False), None, history, \
+        return gr.update(visible=True), gr.update(visible=True), gr.update(visible=False), None, chatbot, \
             gr.update(choices=[]), gr.update(visible=False)
     else:
         if local_doc_qa.check_knowledge_in_collections(knowledge_name):
             file_status = f"已加载知识库{knowledge_name}，请开始提问"
             return gr.update(visible=False), gr.update(visible=False), gr.update(visible=True), \
-                knowledge_name, history + [[None, file_status]], \
+                knowledge_name, chatbot + [[None, file_status]], \
                 gr.update(choices=local_doc_qa.list_file_from_vector_store(knowledge_name), value=[]), \
                 gr.update(visible=True)
         else:
             file_status = f"已选择知识库{knowledge_name}，当前知识库中未上传文件，请先上传文件后，再开始提问"
             return gr.update(visible=False), gr.update(visible=False), gr.update(visible=True), \
-                knowledge_name, history + [[None, file_status]], \
+                knowledge_name, chatbot + [[None, file_status]], \
                 gr.update(choices=[], value=[]), gr.update(visible=True)
 
 
@@ -225,27 +221,27 @@ knowledge_base_test_mode_info = ("【注意】\n\n"
                                  "相关参数将在后续版本中支持本界面直接修改。")
 
 
-def change_mode(mode, history):
+def change_mode(mode, chatbot):
     if mode == "知识库问答":
-        return gr.update(visible=True), gr.update(visible=False), history
+        return gr.update(visible=True), gr.update(visible=False), chatbot
         # + [[None, "【注意】：您已进入知识库问答模式，您输入的任何查询都将进行知识库查询，然后会自动整理知识库关联内容进入模型查询！！！"]]
     elif mode == "知识库测试":
         return gr.update(visible=True), gr.update(visible=True), [[None,
                                                                    knowledge_base_test_mode_info]]
     else:   # LLM 对话，Bing搜索问答
-        return gr.update(visible=False), gr.update(visible=False), history
+        return gr.update(visible=False), gr.update(visible=False), chatbot
 
 
-def change_chunk_content(mode, label_content, history):
+def change_chunk_content(mode, label_content, chatbot):
     content = ""
     if "chunk_content" in label_content:
         content = "搜索结果上下文关联"
     elif "one_content_segmentation" in label_content:  # 这里没用上，可以先留着
         content = "内容分段入库"
     if mode:
-        return gr.update(visible=True), history + [[None, f"【已开启{content}】"]]
+        return gr.update(visible=True), chatbot + [[None, f"【已开启{content}】"]]
     else:
-        return gr.update(visible=False), history + [[None, f"【已关闭{content}】"]]
+        return gr.update(visible=False), chatbot + [[None, f"【已关闭{content}】"]]
 
 
 def add_vs_name(knowledge_name, chatbot):
@@ -269,7 +265,7 @@ def add_vs_name(knowledge_name, chatbot):
 
 
 # 自动化加载固定文件间中文件
-def reinit_vector_store(knowledge_name, history):
+def reinit_vector_store(knowledge_name, chatbot):
     try:
         # shutil.rmtree(os.path.join(KB_ROOT_PATH, knowledge_name, "vector_store"))
         # vs_path = os.path.join(KB_ROOT_PATH, knowledge_name, "vector_store")
@@ -284,7 +280,7 @@ def reinit_vector_store(knowledge_name, history):
         logger.error(e)
         model_status = """知识库构建未成功"""
         logger.info(model_status)
-    return history + [[None, model_status]]
+    return chatbot + [[None, model_status]]
 
 
 def refresh_vs_list():
@@ -346,7 +342,7 @@ init_message = f"""欢迎使用 langchain-ChatGLM Web UI！
 
 知识库问答模式，选择知识库名称后，即可开始问答，当前知识库{default_vs}，如有需要可以在选择知识库名称后上传文件/文件夹至知识库。
 
-知识库暂不支持文件删除，该功能将在后续版本中推出。
+在开始新的提问前，请清除历史记录，防止之前的对话影响回答。
 """
 
 # 初始化消息
@@ -358,10 +354,10 @@ default_theme_args = dict(
 )
 
 with gr.Blocks(css=block_css, theme=gr.themes.Default(**default_theme_args)) as demo:
-    knowledge_name, file_status, model_status = \
-        gr.State(os.path.join(KB_ROOT_PATH, get_vs_list()[0], "vector_store") if len(get_vs_list()) > 1 else ""), \
-            gr.State(""), \
-            gr.State(model_status)
+    knowledge_name = gr.State(get_vs_list()[0] if len(get_vs_list()) > 1 else "")
+    file_status = gr.State("")
+    model_status = gr.State(model_status)
+    history = gr.State([])
     gr.Markdown(webui_title)
     with gr.Tab("对话"):
         with gr.Row():
@@ -371,6 +367,7 @@ with gr.Blocks(css=block_css, theme=gr.themes.Default(**default_theme_args)) as 
                                      show_label=False, height=750)
                 query = gr.Textbox(show_label=False,
                                    placeholder="请输入提问内容，按回车进行提交", container=False)
+                empty_btn = gr.Button("清除历史记录")
             with gr.Column(scale=5):
                 mode = gr.Radio(["LLM 对话", "知识库问答", "Bing搜索问答"],
                                 label="请选择使用模式",
@@ -440,12 +437,13 @@ with gr.Blocks(css=block_css, theme=gr.themes.Default(**default_theme_args)) as 
                                              outputs=[knowledge_name, folder_files, chatbot, files_to_delete], )
                     flag_csv_logger.setup([query, knowledge_name, chatbot, mode], "flagged")
                     query.submit(get_answer,
-                                 [query, knowledge_name, chatbot, mode],
-                                 [chatbot, query])
+                                 [query, knowledge_name, chatbot, history, mode],
+                                 [chatbot, query, history])
                     delete_file_button.click(delete_file,
                                              show_progress=True,
                                              inputs=[select_vs, files_to_delete, chatbot],
                                              outputs=[files_to_delete, chatbot])
+                    # empty_btn.click(clear_history, inputs=[chatbot], outputs=[chatbot, history], show_progress=True)
     with gr.Tab("知识库测试 Beta"):
         with gr.Row():
             with gr.Column(scale=10):
@@ -546,7 +544,7 @@ with gr.Blocks(css=block_css, theme=gr.themes.Default(**default_theme_args)) as 
                     query.submit(get_answer,
                                  [query, knowledge_name, chatbot, mode, score_threshold, vector_search_top_k,
                                   chunk_content, chunk_sizes],
-                                 [chatbot, query])
+                                 [chatbot, query, history])
     with gr.Tab("模型配置"):
         llm_model = gr.Radio(llm_model_dict_list,
                              label="LLM 模型",
