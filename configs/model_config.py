@@ -243,14 +243,15 @@ PROMPT_TEMPLATE = """已知信息：
 CACHED_VS_NUM = 1
 
 # 文本分句长度
-SENTENCE_SIZE = 100
-SENTENCE_OVERLAP = 20  # 文本重叠长度
+SENTENCE_SIZE = 150
+# 文本重叠长度
+SENTENCE_OVERLAP = 0
 
 # 匹配后单段上下文长度
 CHUNK_SIZE = 1000
 
 # 传入LLM的历史记录长度
-LLM_HISTORY_LEN = 4
+LLM_HISTORY_LEN = 0
 
 # 知识库检索时返回的匹配内容条数
 VECTOR_SEARCH_TOP_K = 5

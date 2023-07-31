@@ -466,7 +466,7 @@ with gr.Blocks(css=block_css, theme=gr.themes.Default(**default_theme_args)) as 
                             outputs=[vs_setting, knowledge_set, chatbot])
                 with knowledge_set:
                     score_threshold = gr.Number(value=VECTOR_SEARCH_SCORE_THRESHOLD,
-                                                label="知识距离 Score 阈值，分值越低匹配度越高",
+                                                label="知识距离 Score 阈值，分值越低匹配度越高（0则不设阈值）",
                                                 precision=0,
                                                 interactive=True)
                     vector_search_top_k = gr.Number(value=VECTOR_SEARCH_TOP_K, precision=0,

@@ -17,7 +17,7 @@ class ChatGLMLLMChain(BaseAnswer, Chain, ABC):
     max_token: int = 10000
     temperature: float = 0.01
     # 相关度
-    top_p = 0.4
+    top_p = 0.3
     # 候选词数量
     top_k = 10
     checkPoint: LoaderCheckPoint = None
