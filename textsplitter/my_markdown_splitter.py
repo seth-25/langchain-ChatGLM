@@ -12,7 +12,7 @@ from typing import (
 
 from langchain.docstore.document import Document
 
-from configs.model_config import SENTENCE_SIZE
+from configs.model_config import *
 
 md_headers = [
     ("#", "Header 1"),
@@ -38,7 +38,7 @@ def md_title_enhance(docs: List[Document]) -> List[Document]:
         print("文件不存在")
 
 
-def my_md_split(filepath, sentence_size=SENTENCE_SIZE):
+def my_md_split(filepath, sentence_size=SENTENCE_SIZE, sentence_overlap=SENTENCE_OVERLAP):
     # 获取文本
     loader = TextLoader(filepath)
     markdown_document: Document = loader.load()[0]
@@ -47,7 +47,7 @@ def my_md_split(filepath, sentence_size=SENTENCE_SIZE):
     header_splitter = MarkdownHeaderTextSplitter(headers_to_split_on=md_headers, return_each_line=False)
     md_header_splits = header_splitter.split_text(markdown_document.page_content)
 
-    text_splitter = MarkdownTextSplitter(chunk_size=sentence_size, chunk_overlap=0)
+    text_splitter = MarkdownTextSplitter(chunk_size=sentence_size, chunk_overlap=sentence_overlap)
     docs = text_splitter.split_documents(md_header_splits)
 
     docs = md_title_enhance(docs)
