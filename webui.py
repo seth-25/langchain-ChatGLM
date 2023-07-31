@@ -35,7 +35,8 @@ flag_csv_logger = gr.CSVLogger()
 def get_answer(query, knowledge_name, chatbot, history, mode, score_threshold=VECTOR_SEARCH_SCORE_THRESHOLD,
                vector_search_top_k=VECTOR_SEARCH_TOP_K, chunk_content: bool = True,
                chunk_size=CHUNK_SIZE, streaming: bool = STREAMING):
-    print("chunk_content", chunk_content, "chunk_size", chunk_size, "score_threshold", score_threshold, "vector_search_top_k", vector_search_top_k)
+    print("chunk_content", chunk_content, "chunk_size", chunk_size, "score_threshold", score_threshold,
+          "vector_search_top_k", vector_search_top_k)
     print("history", history)
     for h in history:
         print(h)
@@ -68,14 +69,15 @@ def get_answer(query, knowledge_name, chatbot, history, mode, score_threshold=VE
                 source += f"""<details> <summary>【出处{i + 1}】：{os.path.split(doc.metadata["source"])[-1]} &nbsp;&nbsp;&nbsp; 【距离】：{doc.metadata['score']}</summary>"""
                 source += f"""{doc_page_content}"""
                 source += f"""</details>"""
-            history[-1][-1] += source   # 模型答案加上出处，一起加入history中
+            history[-1][-1] += source  # 模型答案加上出处，一起加入history中
             chatbot[-1] = history[-1]
             yield chatbot, "", history
     elif mode == "知识库测试":
         if local_doc_qa.check_knowledge_in_collections(knowledge_name):
             resp, prompt = local_doc_qa.get_knowledge_based_content_test(query=query, knowledge_name=knowledge_name)
             if not resp["source_documents"]:
-                chatbot[-1] = [query, "根据您的设定，没有匹配到任何内容，请确认您设置的知识距离 Score 阈值是否过小或其他参数是否正确。"]
+                chatbot[-1] = [query,
+                               "根据您的设定，没有匹配到任何内容，请确认您设置的知识距离 Score 阈值是否过小或其他参数是否正确。"]
                 yield chatbot, "", history
             else:
                 source = ""
@@ -132,7 +134,8 @@ def init_model():
         return reply
 
 
-def reinit_model(llm_model, embedding_model, llm_history_len, no_remote_model, use_ptuning_v2, use_lora, top_k, chatbot):
+def reinit_model(llm_model, embedding_model, llm_history_len, no_remote_model, use_ptuning_v2, use_lora, top_k,
+                 chatbot):
     try:
         llm_model_ins = shared.loaderLLM(llm_model, no_remote_model, use_ptuning_v2)
         llm_model_ins.history_len = llm_history_len
@@ -194,7 +197,7 @@ def get_vector_store(knowledge_name, files, sentence_size, chatbot, one_content,
 def change_vs_name_input(knowledge_name, chatbot):
     # print("change_vs_name_input", knowledge_name, type(knowledge_name))
     if knowledge_name == "新建知识库":
-        return gr.update(visible=True), gr.update(visible=True), gr.update(visible=False), None, chatbot, \
+        return gr.update(visible=True), gr.update(visible=True), gr.update(visible=False), "新建知识库", chatbot, \
             gr.update(choices=[]), gr.update(visible=False)
     else:
         if local_doc_qa.check_knowledge_in_collections(knowledge_name):
@@ -228,7 +231,7 @@ def change_mode(mode, chatbot):
     elif mode == "知识库测试":
         return gr.update(visible=True), gr.update(visible=True), [[None,
                                                                    knowledge_base_test_mode_info]]
-    else:   # LLM 对话，Bing搜索问答
+    else:  # LLM 对话，Bing搜索问答
         return gr.update(visible=False), gr.update(visible=False), chatbot
 
 
@@ -322,6 +325,11 @@ def delete_vs(knowledge_name, chatbot):
             gr.update(visible=True), chatbot, gr.update(visible=True)
 
 
+def clear_history(chatbot):
+    chatbot.append([None, "已清除历史记忆"])
+    return chatbot, []
+
+
 block_css = """.importantButton {
     background: linear-gradient(45deg, #7e0570,#5d1c99, #6e00ff) !important;
     border: none !important;
@@ -342,7 +350,7 @@ init_message = f"""欢迎使用 langchain-ChatGLM Web UI！
 
 知识库问答模式，选择知识库名称后，即可开始问答，当前知识库{default_vs}，如有需要可以在选择知识库名称后上传文件/文件夹至知识库。
 
-在开始新的提问前，请清除历史记录，防止之前的对话影响回答。
+在知识库问答模式下，会提供大量知识库信息，在开始新的提问前，请**清除历史记忆**，防止其他问题提供的信息影响回答。
 """
 
 # 初始化消息
@@ -367,7 +375,7 @@ with gr.Blocks(css=block_css, theme=gr.themes.Default(**default_theme_args)) as 
                                      show_label=False, height=750)
                 query = gr.Textbox(show_label=False,
                                    placeholder="请输入提问内容，按回车进行提交", container=False)
-                empty_btn = gr.Button("清除历史记录")
+                empty_btn = gr.Button("清除历史记忆")
             with gr.Column(scale=5):
                 mode = gr.Radio(["LLM 对话", "知识库问答", "Bing搜索问答"],
                                 label="请选择使用模式",
@@ -443,7 +451,7 @@ with gr.Blocks(css=block_css, theme=gr.themes.Default(**default_theme_args)) as 
                                              show_progress=True,
                                              inputs=[select_vs, files_to_delete, chatbot],
                                              outputs=[files_to_delete, chatbot])
-                    # empty_btn.click(clear_history, inputs=[chatbot], outputs=[chatbot, history], show_progress=True)
+                    empty_btn.click(clear_history, inputs=[chatbot], outputs=[chatbot, history], show_progress=True)
     with gr.Tab("知识库测试 Beta"):
         with gr.Row():
             with gr.Column(scale=10):
