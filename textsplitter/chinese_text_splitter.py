@@ -29,6 +29,7 @@ class ChineseTextSplitter(CharacterTextSplitter):
             text = re.sub(r"\n{3,}", r"\n", text)
             text = re.sub('\s', " ", text)
             text = re.sub("\n\n", "", text)
+            text = re.sub("\.{7,}", "", text)  # 多余6个省略号，可能是目录识别乱码
 
         text = re.sub(r'([;；.!?。！？\?])([^”’])', r"\1\n\2", text)  # 单字符断句符
         text = re.sub(r'(\.{6})([^"’”」』])', r"\1\n\2", text)  # 英文省略号

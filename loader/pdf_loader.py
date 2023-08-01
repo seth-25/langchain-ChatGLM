@@ -10,6 +10,7 @@ from configs.model_config import NLTK_DATA_PATH
 
 nltk.data.path = [NLTK_DATA_PATH] + nltk.data.path
 
+
 class UnstructuredPaddlePDFLoader(UnstructuredFileLoader):
     """Loader that uses unstructured to load image files, such as PNGs and JPGs."""
 
@@ -24,6 +25,7 @@ class UnstructuredPaddlePDFLoader(UnstructuredFileLoader):
             img_name = os.path.join(full_dir_path, 'tmp.png')
             with open(txt_file_path, 'w', encoding='utf-8') as fout:
                 for i in range(doc.page_count):
+                    print(f"正在识别pdf第{i + 1}页")
                     page = doc[i]
                     text = page.get_text("")
                     fout.write(text)
@@ -51,7 +53,8 @@ class UnstructuredPaddlePDFLoader(UnstructuredFileLoader):
 if __name__ == "__main__":
     import sys
     sys.path.append(os.path.dirname(os.path.dirname(__file__)))
-    filepath = os.path.join(os.path.dirname(os.path.dirname(__file__)), "knowledge_base", "samples", "content", "test.pdf")
+    filepath = os.path.join(os.path.dirname(os.path.dirname(__file__)), "knowledge_base", "samples", "content",
+                            "test.pdf")
     loader = UnstructuredPaddlePDFLoader(filepath, mode="elements")
     docs = loader.load()
     for doc in docs:

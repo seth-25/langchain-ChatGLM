@@ -325,6 +325,8 @@ class MyAnalyticDB(VectorStore):
         except KeyError:
             raise KeyError("导入的文本没有source，请检查load_file调用的textsplitter")
 
+        print("插入向量总数", len(embeddings))
+        cnt = 0
         chunks_table_data = []
         with self.engine.connect() as conn:
             with conn.begin():
@@ -346,6 +348,8 @@ class MyAnalyticDB(VectorStore):
                         conn.execute(insert(self.__collection_table).values(chunks_table_data))
                         # Clear the chunks_table_data list for the next batch
                         chunks_table_data.clear()
+                        cnt += 1
+                        print(f"已经插入 {batch_size * cnt} 条向量")
 
                 # Insert any remaining records that didn't make up a full batch
                 if chunks_table_data:
