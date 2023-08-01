@@ -21,6 +21,9 @@ embedding_model_dict = {
     "ernie-base": "nghuyong/ernie-3.0-base-zh",
     "text2vec-base": "shibing624/text2vec-base-chinese",
     "text2vec": "GanymedeNil/text2vec-large-chinese",
+    "text2vec-base-multilingual": "shibing624/text2vec-base-multilingual",
+    "text2vec-base-chinese-sentence": "shibing624/text2vec-base-chinese-sentence",
+    "text2vec-base-chinese-paraphrase": "shibing624/text2vec-base-chinese-paraphrase",
     "m3e-small": "moka-ai/m3e-small",
     "m3e-base": "moka-ai/m3e-base",
 }
@@ -35,7 +38,7 @@ EMBEDDING_DEVICE = "cuda" if torch.cuda.is_available() else "mps" if torch.backe
 # llm_model_dict 处理了loader的一些预设行为，如加载位置，模型名称，模型处理器实例
 # 在以下字典中修改属性值，以指定本地 LLM 模型存储位置
 # 如将 "chatglm-6b" 的 "local_model_path" 由 None 修改为 "User/Downloads/chatglm-6b"
-# 此处请写绝对路径
+# 此处请写绝对路径,且路径中必须包含repo-id的模型名称，因为FastChat是以模型名匹配的
 llm_model_dict = {
     "chatglm-6b-int4-qe": {
         "name": "chatglm-6b-int4-qe",
@@ -61,6 +64,15 @@ llm_model_dict = {
         "local_model_path": None,
         "provides": "ChatGLMLLMChain"
     },
+    # langchain-ChatGLM 用户“帛凡” @BoFan-tunning 基于ChatGLM-6B 训练并提供的权重合并模型和 lora 权重文件 chatglm-fitness-RLHF
+    # 详细信息见 HuggingFace 模型介绍页 https://huggingface.co/fb700/chatglm-fitness-RLHF
+    # 使用该模型或者lora权重文件，对比chatglm-6b、chatglm2-6b、百川7b，甚至其它未经过微调的更高参数的模型，在本项目中，总结能力可获得显著提升。
+    "chatglm-fitness-RLHF": {
+        "name": "chatglm-fitness-RLHF",
+        "pretrained_model_name": "fb700/chatglm-fitness-RLHF",
+        "local_model_path": None,
+        "provides": "ChatGLMLLMChain"
+    },
     "chatglm2-6b": {
         "name": "chatglm2-6b",
         "pretrained_model_name": "THUDM/chatglm2-6b",
@@ -68,10 +80,17 @@ llm_model_dict = {
         "provides": "ChatGLMLLMChain"
     },
     "chatglm2-6b-32k": {
-        "name": "chatglm2-6b",
+        "name": "chatglm2-6b-32k",
         "pretrained_model_name": "THUDM/chatglm2-6b-32k",
         "local_model_path": None,
         "provides": "ChatGLMLLMChain"
+    },
+    # 注：chatglm2-cpp已在mac上测试通过，其他系统暂不支持
+    "chatglm2-cpp": {
+        "name": "chatglm2-cpp",
+        "pretrained_model_name": "cylee0909/chatglm2cpp",
+        "local_model_path": None,
+        "provides": "ChatGLMCppLLMChain"
     },
     "chatglm2-6b-int4": {
         "name": "chatglm2-6b-int4",
@@ -206,7 +225,7 @@ llm_model_dict = {
         "pretrained_model_name": "gpt-3.5-turbo",
         "provides": "FastChatOpenAILLMChain",
         "local_model_path": None,
-        "api_base_url": "https://api.openapi.com/v1",
+        "api_base_url": "https://api.openai.com/v1",
         "api_key": ""
     },
 
