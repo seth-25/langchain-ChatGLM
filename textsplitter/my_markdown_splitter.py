@@ -151,7 +151,8 @@ def my_md_split(filepath, sentence_size=SENTENCE_SIZE, sentence_overlap=SENTENCE
     text_splitter = MyMarkdownTextSplitter(chunk_size=sentence_size, chunk_overlap=sentence_overlap)
     docs = text_splitter.split_documents(md_header_splits)
 
-    docs = md_title_enhance(docs)
+    if MD_TITLE_ENHANCE:
+        docs = md_title_enhance(docs)
     for doc in docs:
         doc.metadata["source"] = filepath
     return docs

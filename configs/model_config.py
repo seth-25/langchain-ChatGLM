@@ -341,3 +341,6 @@ BING_SUBSCRIPTION_KEY = ""
 # 通过增加标题判断，判断哪些文本为标题，并在metadata中进行标记；
 # 然后将文本与往上一级的标题进行拼合，实现文本信息的增强。
 ZH_TITLE_ENHANCE = False
+
+MD_TITLE_ENHANCE = True  # 将markdown标题和文本融合
+REMOVE_TITLE = False  # 向模型输入提问时，移除拼接文本重复的markdown标题，在开启上下文功能，且开启MD_TITLE_ENHANCE或ZH_TITLE_ENHANCE时才有效

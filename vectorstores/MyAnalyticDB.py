@@ -14,6 +14,7 @@ from langchain.vectorstores.base import VectorStore
 
 from configs.model_config import *
 from textsplitter.my_markdown_splitter import md_headers
+from utils.regular_util import match_brackets_at_start, remove_brackets_at_start
 
 try:
     from sqlalchemy.orm import declarative_base
@@ -612,7 +613,15 @@ class MyAnalyticDB(VectorStore):
                     doc_score = res.distance
                 else:
                     res = id_map[id]
-                    doc.page_content += "\n" + res.document
+                    res_page_content = res.document
+
+                    if REMOVE_TITLE:
+                        last_res = id_map[id - 1]  # 上一个文本
+                        # 开启标题增强的情况下，如果当前文本和上一个文本标题相同，去掉当前文本的标题
+                        if match_brackets_at_start(last_res.document) == match_brackets_at_start(res.document):
+                            res_page_content = remove_brackets_at_start(res.document)
+
+                    doc.page_content += "\n" + res_page_content
                     doc_score = min(doc_score, res.distance)
             if not isinstance(doc, Document) or doc_score is None:
                 raise ValueError(f"Could not find document, got {doc}")

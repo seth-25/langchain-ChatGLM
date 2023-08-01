@@ -93,7 +93,7 @@ def zh_title_enhance(docs: list[Document]) -> list[Document]:
                 doc.metadata['category'] = 'cn_Title'
                 title = doc.page_content
             elif title:
-                doc.page_content = f"下文与({title})有关。{doc.page_content}"
+                doc.page_content = f"【下文与({title})有关】{doc.page_content}"
         return docs
     else:
         print("文件不存在")
