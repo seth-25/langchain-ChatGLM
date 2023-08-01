@@ -67,6 +67,12 @@ llm_model_dict = {
         "local_model_path": None,
         "provides": "ChatGLMLLMChain"
     },
+    "chatglm2-6b-32k": {
+        "name": "chatglm2-6b",
+        "pretrained_model_name": "THUDM/chatglm2-6b-32k",
+        "local_model_path": None,
+        "provides": "ChatGLMLLMChain"
+    },
     "chatglm2-6b-int4": {
         "name": "chatglm2-6b-int4",
         "pretrained_model_name": "THUDM/chatglm2-6b-int4",
@@ -207,7 +213,8 @@ llm_model_dict = {
 }
 
 # LLM 名称
-LLM_MODEL = "chatglm2-6b"
+# LLM_MODEL = "chatglm2-6b"
+LLM_MODEL = "chatglm2-6b-32k"
 # LLM_MODEL = "chatglm2-6b-int4"
 
 # 量化加载8bit 模型
@@ -235,9 +242,51 @@ KB_ROOT_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "knowled
 
 # 基于上下文的prompt模版，请务必保留"{question}"和"{context}"
 PROMPT_TEMPLATE = """已知信息：
-{context} 
+{context}
 
-根据上述已知信息，简洁和专业的来回答用户的问题。如果无法从中得到答案，请说 “根据已知信息无法回答该问题” 或 “没有提供足够的相关信息”，不允许在答案中添加编造成分，答案请使用中文。 问题是：{question}"""
+根据上述已知信息，简洁和专业的来回答用户的问题。如果无法从中得到答案，请说 “根据已知信息无法回答该问题” 或 “没有提供足够的相关信息”，不允许在答案中添加编造成分，不要让【】内的内容出现在答案里，答案请使用中文。 问题是：{question}"""
+
+# PROMPT_TEMPLATE = """
+# 根据已知信息，简洁和专业的来回答用户的问题。不允许在答案中添加编造成分，不要让【】内的内容出现在答案里，答案请使用中文。
+#
+# 示例：
+#
+# 用户输入：如何设置白名单
+#
+# 已知信息：你好
+#
+# 答案：根据已知信息无法回答该问题
+#
+# 用户输入：如何设置白名单
+#
+# 已知信息：
+# 【下文与(设置白名单)有关】AnalyticDB PostgreSQL版实例默认禁止所有外部IP访问，连接并使用实例前，请先将客户端的IP地址或IP地址段加入AnalyticDB PostgreSQL版的白名单。
+# 【下文与(设置白名单)有关】此步骤为可选步骤，如果您希望通过本地的IDE环境访问数据库，则需要设置白名单。如果您希望通过数据管理DMS访问数据库，则可跳过此步骤。
+# 【下文与(设置白名单,前提条件)有关】已根据快速入门，完成了[创建实例]。
+# 【下文与(设置白名单,操作步骤)有关】1. 登录云原生数据仓库AnalyticDB PostgreSQL版控制台。
+# 2. 在控制台左上角，选择实例所在地域。
+# 3. 找到目标实例，单击实例ID。
+# 【下文与(设置白名单,操作步骤)有关】4. 在基本信息页面的右上方，单击白名单设置。
+# 5. 单击default分组右侧的修改。
+# 6. 在组内白名单下方的文本框中填写需要加入白名单的IP地址或IP地址段。
+# 7. 单击确定。
+#
+# 答案：
+# 设置白名单的步骤如下：
+# 1. 登录云原生数据仓库AnalyticDB PostgreSQL版控制台。
+# 2. 在控制台左上角，选择实例所在地域。
+# 3. 找到目标实例，单击实例ID。
+# 4. 在基本信息页面的右上方，单击白名单设置。
+# 5. 单击default分组右侧的修改。
+# 6. 在组内白名单下方的文本框中填写需要加入白名单的IP地址或IP地址段。
+# 7. 单击确定。
+#
+# 用户输入：{question}
+#
+# 已知信息：{context}
+#
+# 答案：
+# """
 
 # 缓存知识库数量,如果是ChatGLM2,ChatGLM2-int4,ChatGLM2-int8模型若检索效果不好可以调成’10’
 CACHED_VS_NUM = 1

@@ -550,7 +550,7 @@ with gr.Blocks(css=block_css, theme=gr.themes.Default(**default_theme_args)) as 
                                              outputs=[knowledge_name, files, chatbot], )
                     flag_csv_logger.setup([query, knowledge_name, chatbot, mode], "flagged")
                     query.submit(get_answer,
-                                 [query, knowledge_name, chatbot, mode, score_threshold, vector_search_top_k,
+                                 [query, knowledge_name, chatbot, history, mode, score_threshold, vector_search_top_k,
                                   chunk_content, chunk_sizes],
                                  [chatbot, query, history])
     with gr.Tab("模型配置"):

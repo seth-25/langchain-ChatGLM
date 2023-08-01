@@ -13,6 +13,7 @@ from langchain.utils import get_from_dict_or_env
 from langchain.vectorstores.base import VectorStore
 
 from configs.model_config import *
+from textsplitter.my_markdown_splitter import md_headers
 
 try:
     from sqlalchemy.orm import declarative_base
@@ -473,8 +474,9 @@ class MyAnalyticDB(VectorStore):
 
         id_set = set()
         id_map = {}
-        batch_size = 10  # 区间一次拓宽多少
+        batch_size = 20  # 区间一次拓宽多少
 
+        # count = 0
         for result in results:
             # print("查询result", len(result.document), result)
             if 0 < self.score_threshold < result.distance:
@@ -488,6 +490,7 @@ class MyAnalyticDB(VectorStore):
             last_r = result.id + 1  # 上一次搜索区间范围下界的下一个
             for width in range(10, max_id + batch_size, batch_size):  # width是区间宽度/2，从10开始，一次向前后分别拓宽batch_size个
                 if last_l < min_id and last_r > max_id:  # 区间已经拓展到id范围外
+                    # print("区间已经拓展到id范围外")
                     break
 
                 # print("result.id, width, range", result.id, width, [result.id - width, result.id + width])
@@ -514,6 +517,7 @@ class MyAnalyticDB(VectorStore):
                             where(and_(min_id_condition, max_id_condition)). \
                             order_by(self.__collection_table.c.id)
                         right_results = conn.execute(s, {"embedding": embedding}).fetchall()
+                        # count += 1
 
                 # print("left", left_range[0], left_range[1])
                 # for lid, l_result in enumerate(left_results):
@@ -528,7 +532,7 @@ class MyAnalyticDB(VectorStore):
                         t_result = right_results[j]
                         j += 1
                         is_left = False
-                    elif j >= len(right_results):   # 无可拼下文，选择拼上文
+                    elif j >= len(right_results):  # 无可拼下文，选择拼上文
                         t_result = left_results[i]
                         i += 1
                         is_left = True
@@ -542,20 +546,23 @@ class MyAnalyticDB(VectorStore):
                             i += 1
                             is_left = True
 
+                    # 拼上该方向的文本超长度了，或不是同个文件，这个方向不再拼
                     if docs_len + len(t_result.document) > self.chunk_size or \
-                            t_result.metadata["source"] != result.metadata["source"]:  # 该方向要拼的超长度了，这个方向不再拼
+                            t_result.metadata["source"] != result.metadata["source"]:
                         if is_left:
                             i = sys.maxsize
                         else:
                             j = sys.maxsize
                         continue
-                    if "Header 1" in t_result.metadata.keys():
-                        if t_result.metadata["Header 1"] != result.metadata["Header 1"]:    # 最大的标题不同则不再拼
-                            if is_left:
-                                i = sys.maxsize
-                            else:
-                                j = sys.maxsize
-                            continue
+                    if t_result.source.lower().endswith(".md"):  # 是markdown
+                        header1 = md_headers[0][1]
+                        if header1 in t_result.metadata.keys():
+                            if t_result.metadata[header1] != result.metadata[header1]:  # 最大的标题不同则不再拼
+                                if is_left:
+                                    i = sys.maxsize
+                                else:
+                                    j = sys.maxsize
+                                continue
 
                     if t_result.id in id_set:  # 重叠部分跳过，防止都召回相近的内容，信息量过少
                         continue
@@ -566,40 +573,13 @@ class MyAnalyticDB(VectorStore):
                     id_map[t_result.id] = t_result
                 # print(id_set, docs_len, "i:", i, "j:", j)
                 if i == sys.maxsize and j == sys.maxsize:  # 两个方向都无法继续拼了，才退出
+                    # print("两个方向都无法继续拼了")
                     break
-
-                # for i in range(max(len(left_results), len(right_results))):
-                #     if i < len(right_results):  # 添加下文id
-                #         r_result = right_results[i]
-                #         if docs_len + len(r_result.document) > self.chunk_size or \
-                #                 r_result.metadata["source"] != result.metadata["source"]:
-                #             break_flag = True
-                #             break
-                #         elif r_result.metadata["source"] == result.metadata["source"]:
-                #             docs_len += len(r_result.document)
-                #             id_set.add(r_result.id)
-                #             id_map[r_result.id] = r_result
-                #
-                #     if i < len(left_results):  # 添加上文id
-                #         l_result = left_results[i]
-                #         if docs_len + len(l_result.document) > self.chunk_size or \
-                #                 l_result.metadata["source"] != result.metadata["source"]:
-                #             break_flag = True
-                #             break
-                #         elif l_result.metadata["source"] == result.metadata["source"]:
-                #             docs_len += len(l_result.document)
-                #             id_set.add(l_result.id)
-                #             id_map[l_result.id] = l_result
-
-                # print("docs_len", docs_len, id_set)
-                # print("final docs_len", docs_len, id_set)
-                # print("==================================")
-                # if break_flag:  # 已经添加足够的上下文，退出
-                #     break
 
                 last_l = result.id - width - 1
                 last_r = result.id + width + 1
-
+            # print("查询次数", count)
+        # print("查询次数", count)
         if len(id_set) == 0:
             return []
         # print("id_set", id_set)
