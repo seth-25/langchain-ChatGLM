@@ -64,6 +64,7 @@ class MyAnalyticDB(VectorStore):
         self.score_threshold = VECTOR_SEARCH_SCORE_THRESHOLD
         self.chunk_content = True
         self.chunk_size = CHUNK_SIZE
+        self.md_title_split = 1 if MD_TITLE_SPLIT < 1 else 6 if MD_TITLE_SPLIT > 6 else MD_TITLE_SPLIT
 
         self.__post_init__(engine_args)
 
@@ -478,7 +479,7 @@ class MyAnalyticDB(VectorStore):
         batch_size = 20  # 区间一次拓宽多少
 
         for result in results:
-            count = 0
+            # count = 0
             # print("查询result", len(result.document), result)
             if 0 < self.score_threshold < result.distance:
                 continue
@@ -518,7 +519,7 @@ class MyAnalyticDB(VectorStore):
                             where(and_(min_id_condition, max_id_condition)). \
                             order_by(self.__collection_table.c.id)
                         right_results = conn.execute(s, {"embedding": embedding}).fetchall()
-                        count += 1
+                        # count += 1
 
                 # print("left", left_range[0], left_range[1])
                 # for lid, l_result in enumerate(left_results):
@@ -560,14 +561,19 @@ class MyAnalyticDB(VectorStore):
                             j = sys.maxsize
                         continue
                     if t_result.source.lower().endswith(".md"):  # 是markdown
-                        header1 = md_headers[0][1]
-                        if header1 in t_result.metadata.keys():
-                            if t_result.metadata[header1] != result.metadata[header1]:  # 最大的标题不同则该方向不再拼
-                                if is_left:
-                                    i = sys.maxsize
-                                else:
-                                    j = sys.maxsize
-                                continue
+                        is_continue = False
+                        for h in range(self.md_title_split):
+                            header = md_headers[h][1]
+                            if header in t_result.metadata.keys() and header in result.metadata.keys():
+                                if t_result.metadata[header] != result.metadata[header]:  # 标题不同则该方向不再拼
+                                    if is_left:
+                                        i = sys.maxsize
+                                    else:
+                                        j = sys.maxsize
+                                    is_continue = True
+                                    break
+                        if is_continue:
+                            continue
 
                     if t_result.id in id_set:  # 重叠部分跳过，防止都召回相近的内容，信息量过少
                         continue
@@ -583,7 +589,7 @@ class MyAnalyticDB(VectorStore):
 
                 last_l = result.id - width - 1
                 last_r = result.id + width + 1
-            print("查询次数", count)
+            # print("查询次数", count)
         if len(id_set) == 0:
             return []
         # print("id_set", id_set)

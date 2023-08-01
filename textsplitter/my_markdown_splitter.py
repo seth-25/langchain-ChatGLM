@@ -12,6 +12,7 @@ md_headers = [
     ("###", "Header 3"),
     ("####", "Header 4"),
     ("#####", "Header 5"),
+    ("######", "Header 6"),
 ]
 
 def _split_text_with_regex(
