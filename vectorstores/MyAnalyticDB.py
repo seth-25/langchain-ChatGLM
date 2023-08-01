@@ -477,8 +477,8 @@ class MyAnalyticDB(VectorStore):
         id_map = {}
         batch_size = 20  # 区间一次拓宽多少
 
-        # count = 0
         for result in results:
+            count = 0
             # print("查询result", len(result.document), result)
             if 0 < self.score_threshold < result.distance:
                 continue
@@ -494,7 +494,7 @@ class MyAnalyticDB(VectorStore):
                     # print("区间已经拓展到id范围外")
                     break
 
-                # print("result.id, width, range", result.id, width, [result.id - width, result.id + width])
+                # print(f"result.id {result.id}, width {width}, range {[result.id - width, result.id + width]}")
 
                 left_range = [result.id - width, last_l]
                 right_range = [last_r, result.id + width]
@@ -518,7 +518,7 @@ class MyAnalyticDB(VectorStore):
                             where(and_(min_id_condition, max_id_condition)). \
                             order_by(self.__collection_table.c.id)
                         right_results = conn.execute(s, {"embedding": embedding}).fetchall()
-                        # count += 1
+                        count += 1
 
                 # print("left", left_range[0], left_range[1])
                 # for lid, l_result in enumerate(left_results):
@@ -527,7 +527,11 @@ class MyAnalyticDB(VectorStore):
                 # for rid, r_result in enumerate(right_results):
                 #     print(rid, len(r_result.document), "(", r_result.id, [r_result.document], ")")
 
-                i = j = 0
+                i = j = 0   # i,j = sys.maxsize表示该方向不再可拼
+                if len(left_results) == 0:  # 不存在上文
+                    i = sys.maxsize
+                if len(right_results) == 0:  # 不存在下文
+                    j = sys.maxsize
                 while i < len(left_results) or j < len(right_results):
                     if i >= len(left_results):  # 无可拼上文，选择拼下文
                         t_result = right_results[j]
@@ -538,7 +542,7 @@ class MyAnalyticDB(VectorStore):
                         i += 1
                         is_left = True
                     else:
-                        if right_results[j].distance <= left_results[i].distance:  # 优先拼距离近的上下文
+                        if right_results[j].distance <= left_results[i].distance:  # 优先拼距离近的上下文，距离相同拼下文
                             t_result = right_results[j]
                             j += 1
                             is_left = False
@@ -558,7 +562,7 @@ class MyAnalyticDB(VectorStore):
                     if t_result.source.lower().endswith(".md"):  # 是markdown
                         header1 = md_headers[0][1]
                         if header1 in t_result.metadata.keys():
-                            if t_result.metadata[header1] != result.metadata[header1]:  # 最大的标题不同则不再拼
+                            if t_result.metadata[header1] != result.metadata[header1]:  # 最大的标题不同则该方向不再拼
                                 if is_left:
                                     i = sys.maxsize
                                 else:
@@ -579,8 +583,7 @@ class MyAnalyticDB(VectorStore):
 
                 last_l = result.id - width - 1
                 last_r = result.id + width + 1
-            # print("查询次数", count)
-        # print("查询次数", count)
+            print("查询次数", count)
         if len(id_set) == 0:
             return []
         # print("id_set", id_set)
