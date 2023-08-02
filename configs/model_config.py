@@ -243,9 +243,10 @@ BF16 = False
 # 本地lora存放的位置
 LORA_DIR = "loras/"
 
-# LLM lora path，默认为空，如果有请直接指定文件夹路径
-LLM_LORA_PATH = ""
-USE_LORA = True if LLM_LORA_PATH else False
+# LORA的名称，如有请指定为列表
+
+LORA_NAME = ""
+USE_LORA = True if LORA_NAME else False
 
 # LLM streaming reponse
 STREAMING = True
