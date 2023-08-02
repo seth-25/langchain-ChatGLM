@@ -160,9 +160,7 @@ def my_md_split(filepath, sentence_size=SENTENCE_SIZE, sentence_overlap=SENTENCE
 
 
 if __name__ == "__main__":
-    filepath = "../docs/Serverless快速入门.md"
-    # filepath = "../docs/CHANGELOG.md"
-    # filepath = "../docs/test.md"
+    filepath = "../docs/CHANGELOG.md"
     docs = my_md_split(filepath)
     print("doc ===========================")
     for doc in docs:
