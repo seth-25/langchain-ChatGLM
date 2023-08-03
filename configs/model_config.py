@@ -369,6 +369,9 @@ BING_SUBSCRIPTION_KEY = ""
 # 然后将文本与往上一级的标题进行拼合，实现文本信息的增强。
 ZH_TITLE_ENHANCE = False
 
+# 中文按句切分后，是否需要合并较短的句子
+CHINESE_TEXT_SPLITTER_MERGE_SPLIT = False
+
 MD_TITLE_ENHANCE = True  # 将markdown标题和文本融合
 REMOVE_TITLE = False  # 向模型输入提问时，移除拼接文本重复的markdown标题，在开启上下文功能，且开启MD_TITLE_ENHANCE或ZH_TITLE_ENHANCE时才有效
 MD_TITLE_SPLIT = 1  # 上下文拼接时，几级标题不同就不再拼接，值为1～6
