@@ -32,12 +32,13 @@ local_doc_qa = LocalDocQA()
 flag_csv_logger = gr.CSVLogger()
 
 
-def get_answer(query, knowledge_name, chatbot, history, mode, score_threshold=VECTOR_SEARCH_SCORE_THRESHOLD,
-               vector_search_top_k=VECTOR_SEARCH_TOP_K, chunk_content: bool = True,
-               chunk_size=CHUNK_SIZE, streaming: bool = STREAMING):
+def get_answer(query, keyword, knowledge_name, chatbot, history, mode, score_threshold=VECTOR_SEARCH_SCORE_THRESHOLD,
+               vector_search_top_k=VECTOR_SEARCH_TOP_K, chunk_content: bool = True, chunk_size=CHUNK_SIZE,
+               streaming: bool = STREAMING):
     print("chunk_content", chunk_content, "chunk_size", chunk_size, "score_threshold", score_threshold,
           "vector_search_top_k", vector_search_top_k)
     print("history", history)
+    print("keyword", keyword, type(keyword))
     for h in history:
         print(h)
     local_doc_qa.chunk_content = chunk_content
@@ -59,10 +60,10 @@ def get_answer(query, knowledge_name, chatbot, history, mode, score_threshold=VE
                     enumerate(resp["source_documents"])])
             history[-1][-1] += source
             chatbot[-1] = history[-1]
-            yield chatbot, "", history
+            yield chatbot, history, "", ""
     elif mode == "知识库问答" and local_doc_qa.check_knowledge_in_collections(knowledge_name):
         for resp, history in local_doc_qa.get_knowledge_based_answer(
-                query=query, knowledge_name=knowledge_name, chat_history=history, streaming=streaming):
+                query=query, knowledge_name=knowledge_name, chat_history=history, streaming=streaming, keyword=keyword):
             source = ""
             for i, doc in enumerate(resp["source_documents"]):
                 doc_page_content = doc.page_content.replace('\n', '<br>')
@@ -71,14 +72,14 @@ def get_answer(query, knowledge_name, chatbot, history, mode, score_threshold=VE
                 source += f"""</details>"""
             history[-1][-1] += source  # 模型答案加上出处，一起加入history中
             chatbot[-1] = history[-1]
-            yield chatbot, "", history
+            yield chatbot, history, "", ""
     elif mode == "知识库测试":
         if local_doc_qa.check_knowledge_in_collections(knowledge_name):
             resp, prompt = local_doc_qa.get_knowledge_based_content_test(query=query, knowledge_name=knowledge_name)
             if not resp["source_documents"]:
                 chatbot[-1] = [query,
                                "根据您的设定，没有匹配到任何内容，请确认您设置的知识距离 Score 阈值是否过小或其他参数是否正确。"]
-                yield chatbot, "", history
+                yield chatbot, history, "", ""
             else:
                 source = ""
                 for i, doc in enumerate(resp["source_documents"]):
@@ -87,10 +88,10 @@ def get_answer(query, knowledge_name, chatbot, history, mode, score_threshold=VE
                     source += f"""{doc_page_content}"""
                     source += f"""</details>"""
                 chatbot[-1] = [query, "以下内容为知识库中满足设置条件的匹配结果：\n\n" + source]
-                yield chatbot, "", history
+                yield chatbot, history, "", ""
         else:
             chatbot[-1] = [query, "请选择知识库后进行测试，当前未选择知识库。"]
-            yield chatbot, "", history
+            yield chatbot, history, "", ""
     else:
         answer_result_stream_result = local_doc_qa.llm_model_chain(
             {"prompt": query, "history": history, "streaming": streaming})
@@ -100,7 +101,7 @@ def get_answer(query, knowledge_name, chatbot, history, mode, score_threshold=VE
             history = answer_result.history
             history[-1][-1] = resp
             chatbot[-1] = history[-1]
-            yield chatbot, "", history
+            yield chatbot, history, "", ""
     logger.info(
         f"flagging: username={FLAG_USER_NAME},query={query},knowledge_name={knowledge_name},mode={mode},history={history}")
     flag_csv_logger.flag([query, knowledge_name, history, mode], username=FLAG_USER_NAME)
@@ -112,7 +113,6 @@ def init_model():
     args_dict = vars(args)
     shared.loaderCheckPoint = LoaderCheckPoint(args_dict)
     llm_model_ins = shared.loaderLLM()
-    llm_model_ins.history_len = LLM_HISTORY_LEN
     try:
         local_doc_qa.init_cfg(llm_model=llm_model_ins)
         answer_result_stream_result = local_doc_qa.llm_model_chain(
@@ -134,11 +134,15 @@ def init_model():
         return reply
 
 
-def reinit_model(llm_model, embedding_model, llm_history_len, no_remote_model, use_ptuning_v2, use_lora, top_k,
+def reinit_model(llm_model, embedding_model, llm_history_len, llm_max_length, llm_temperature, llm_top_p,
+                 no_remote_model, use_ptuning_v2, use_lora, top_k,
                  chatbot):
     try:
         llm_model_ins = shared.loaderLLM(llm_model, no_remote_model, use_ptuning_v2)
         llm_model_ins.history_len = llm_history_len
+        llm_model_ins.max_length = llm_max_length
+        llm_model_ins.temperature = llm_temperature
+        llm_model_ins.top_p = llm_top_p
         local_doc_qa.init_cfg(llm_model=llm_model_ins,
                               embedding_model=embedding_model,
                               top_k=top_k)
@@ -374,8 +378,12 @@ with gr.Blocks(css=block_css, theme=gr.themes.Default(**default_theme_args)) as 
                                      elem_id="chat-box",
                                      show_label=False, height=750)
                 query = gr.Textbox(show_label=False,
-                                   placeholder="请输入提问内容，按回车进行提交", container=False)
-                empty_btn = gr.Button("清除历史记忆")
+                                   placeholder="请输入提问内容", lines=3)
+                keyword = gr.Textbox(show_label=False,
+                                     placeholder="（可选）请输入搜索知识库的关键句，不输入时以提问搜索知识库，输入时以关键句搜索知识库")
+                with gr.Row():
+                    empty_btn = gr.Button("清除历史记忆")
+                    submit_btn = gr.Button("提交")
             with gr.Column(scale=5):
                 mode = gr.Radio(["LLM 对话", "知识库问答", "Bing搜索问答"],
                                 label="请选择使用模式",
@@ -444,14 +452,17 @@ with gr.Blocks(css=block_css, theme=gr.themes.Default(**default_theme_args)) as 
                                                      vs_add],
                                              outputs=[knowledge_name, folder_files, chatbot, files_to_delete], )
                     flag_csv_logger.setup([query, knowledge_name, chatbot, mode], "flagged")
-                    query.submit(get_answer,
-                                 [query, knowledge_name, chatbot, history, mode],
-                                 [chatbot, query, history])
                     delete_file_button.click(delete_file,
                                              show_progress=True,
                                              inputs=[select_vs, files_to_delete, chatbot],
                                              outputs=[files_to_delete, chatbot])
+                    # query.submit(get_answer,
+                    #              [query, knowledge_name, chatbot, history, mode],
+                    #              [chatbot, query, history])
                     empty_btn.click(clear_history, inputs=[chatbot], outputs=[chatbot, history], show_progress=True)
+                    submit_btn.click(get_answer,
+                                     inputs=[query, keyword, knowledge_name, chatbot, history, mode],
+                                     outputs=[chatbot, history, query, keyword], show_progress=True)
     with gr.Tab("知识库测试 Beta"):
         with gr.Row():
             with gr.Column(scale=10):
@@ -550,9 +561,10 @@ with gr.Blocks(css=block_css, theme=gr.themes.Default(**default_theme_args)) as 
                                              outputs=[knowledge_name, files, chatbot], )
                     flag_csv_logger.setup([query, knowledge_name, chatbot, mode], "flagged")
                     query.submit(get_answer,
-                                 [query, knowledge_name, chatbot, history, mode, score_threshold, vector_search_top_k,
+                                 [query, query, knowledge_name, chatbot, history, mode, score_threshold,
+                                  vector_search_top_k,
                                   chunk_content, chunk_sizes],
-                                 [chatbot, query, history])
+                                 [chatbot, history, query, query])
     with gr.Tab("模型配置"):
         llm_model = gr.Radio(llm_model_dict_list,
                              label="LLM 模型",
@@ -561,12 +573,28 @@ with gr.Blocks(css=block_css, theme=gr.themes.Default(**default_theme_args)) as 
         no_remote_model = gr.Checkbox(shared.LoaderCheckPoint.no_remote_model,
                                       label="加载本地模型",
                                       interactive=True)
-
-        llm_history_len = gr.Slider(0, 10,
-                                    value=LLM_HISTORY_LEN,
-                                    step=1,
-                                    label="LLM 对话轮数",
-                                    interactive=True)
+        with gr.Row():
+            llm_history_len = gr.Slider(0, 10,
+                                        value=HISTORY_LEN,
+                                        step=1,
+                                        label="LLM 对话轮数",
+                                        interactive=True)
+            llm_max_length = gr.Slider(0, 32768,
+                                       value=MAX_LENGTH,
+                                       step=1,
+                                       label="LLM 最大token数",
+                                       interactive=True)
+        with gr.Row():
+            llm_temperature = gr.Slider(0, 1,
+                                        value=TEMPERATURE,
+                                        step=0.01,
+                                        label="Temperature",
+                                        interactive=True)
+            llm_top_p = gr.Slider(0, 1,
+                                  value=TOP_P,
+                                  step=0.01,
+                                  label="Top P",
+                                  interactive=True)
         use_ptuning_v2 = gr.Checkbox(USE_PTUNING_V2,
                                      label="使用p-tuning-v2微调过的模型",
                                      interactive=True)
@@ -581,7 +609,8 @@ with gr.Blocks(css=block_css, theme=gr.themes.Default(**default_theme_args)) as 
                           label="向量匹配 top k", interactive=True)
         load_model_button = gr.Button("重新加载模型")
         load_model_button.click(reinit_model, show_progress=True,
-                                inputs=[llm_model, embedding_model, llm_history_len, no_remote_model, use_ptuning_v2,
+                                inputs=[llm_model, embedding_model, llm_history_len, llm_max_length, llm_temperature,
+                                        llm_top_p, no_remote_model, use_ptuning_v2,
                                         use_lora, top_k, chatbot], outputs=chatbot)
 
     demo.load(

@@ -236,6 +236,16 @@ llm_model_dict = {
 LLM_MODEL = "chatglm2-6b-32k"
 # LLM_MODEL = "chatglm2-6b-int4"
 
+# LLM的最大token数
+MAX_LENGTH = 20480
+
+# LLM回答多样性，越低越精确相关，越高越发散
+TEMPERATURE = 0.01
+TOP_P = 0.2
+
+# 传入LLM的历史记录长度/对话长度
+HISTORY_LEN = 3
+
 # 量化加载8bit 模型
 LOAD_IN_8BIT = False
 # Load the model with bfloat16 precision. Requires NVIDIA Ampere GPU.
@@ -318,9 +328,6 @@ SENTENCE_OVERLAP = 0
 
 # 匹配后单段上下文长度
 CHUNK_SIZE = 1000
-
-# 传入LLM的历史记录长度
-LLM_HISTORY_LEN = 3
 
 # 知识库检索时返回的匹配内容条数
 VECTOR_SEARCH_TOP_K = 5

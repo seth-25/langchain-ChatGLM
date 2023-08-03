@@ -167,7 +167,7 @@ class LocalDocQA:
     # 上传文件并创建知识库
     def init_knowledge_vector_store(self,
                                     filepath: str or List[str],
-                                    knowledge_name: str or os.PathLike = None,
+                                    knowledge_name: str,
                                     sentence_size=SENTENCE_SIZE):
         print(f"初始化 {knowledge_name}")
         loaded_files = []
@@ -243,8 +243,9 @@ class LocalDocQA:
             logger.error(e)
             return None, [one_title]
 
-    def get_knowledge_based_answer(self, query, knowledge_name, chat_history=[], streaming: bool = STREAMING):
-        print(f"查询：知识库【{knowledge_name}】；问题【{query}】；历史【{chat_history}】")
+    def get_knowledge_based_answer(self, query, knowledge_name, chat_history=[], streaming: bool = STREAMING,
+                                   keyword: str = ""):
+        print(f"查询：知识库【{knowledge_name}】；问题【{query}】；历史【{chat_history}】；关键词【{keyword}】")
         if not knowledge_name:
             logger.error("知识库名称错误")
             return None
@@ -252,8 +253,12 @@ class LocalDocQA:
         vector_store.chunk_size = self.chunk_size
         vector_store.chunk_content = self.chunk_content
         vector_store.score_threshold = self.score_threshold
-        print("score_threshold", vector_store.score_threshold, "chunk_size", vector_store.chunk_size, "chunk_content", vector_store.chunk_content)
-        related_docs_with_score = vector_store.similarity_search(query, k=self.top_k)
+        print("score_threshold", vector_store.score_threshold, "chunk_size", vector_store.chunk_size, "chunk_content",
+              vector_store.chunk_content)
+        if len(keyword) == 0:
+            related_docs_with_score = vector_store.similarity_search(query, k=self.top_k)
+        else:
+            related_docs_with_score = vector_store.similarity_search(keyword, k=self.top_k)
         torch_gc()
         if len(related_docs_with_score) > 0:
             prompt = generate_prompt(related_docs_with_score, query)
@@ -293,7 +298,8 @@ class LocalDocQA:
         vector_store.chunk_content = self.chunk_content
         vector_store.score_threshold = self.score_threshold
         vector_store.chunk_size = self.chunk_size
-        print("score_threshold", vector_store.score_threshold, "chunk_size", vector_store.chunk_size, "chunk_content", vector_store.chunk_content)
+        print("score_threshold", vector_store.score_threshold, "chunk_size", vector_store.chunk_size, "chunk_content",
+              vector_store.chunk_content)
         related_docs_with_score = vector_store.similarity_search(query, k=self.top_k)
         if not related_docs_with_score:
             response = {"query": query,

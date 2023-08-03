@@ -191,7 +191,7 @@ def load_model(
     local_model_path = llm_model_dict.get(llm_model, {}).get('local_model_path') or ''
     no_remote_model = os.path.isdir(local_model_path)
     llm_model_ins = shared.loaderLLM(llm_model, no_remote_model, use_ptuning_v2)
-    llm_model_ins.history_len = LLM_HISTORY_LEN
+    llm_model_ins.history_len = HISTORY_LEN
 
     try:
         local_doc_qa.init_cfg(llm_model=llm_model_ins,
@@ -275,7 +275,7 @@ with st.sidebar:
                 local_doc_qa = load_model(llm_model, embedding_model, use_ptuning_v2)
 
     history_len = st.slider(
-        "LLM对话轮数", 1, 50, LLM_HISTORY_LEN)
+        "LLM对话轮数", 1, 50, HISTORY_LEN)
 
     if use_kb_mode(mode):
         vs_list = get_vs_list()

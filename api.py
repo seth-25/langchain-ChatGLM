@@ -1,4 +1,4 @@
-#encoding:utf-8
+# encoding:utf-8
 import argparse
 import json
 import os
@@ -19,7 +19,7 @@ from starlette.responses import RedirectResponse
 from chains.local_doc_qa import LocalDocQA
 from configs.model_config import (KB_ROOT_PATH, EMBEDDING_DEVICE,
                                   EMBEDDING_MODEL, NLTK_DATA_PATH,
-                                  VECTOR_SEARCH_TOP_K, LLM_HISTORY_LEN, OPEN_CROSS_DOMAIN)
+                                  VECTOR_SEARCH_TOP_K, HISTORY_LEN, OPEN_CROSS_DOMAIN)
 import models.shared as shared
 from models.loader.args import parser
 from models.loader import LoaderCheckPoint
@@ -179,7 +179,7 @@ async def upload_files(
 
     if file_path_list:
         knowledge_base_id, loaded_files = local_doc_qa.init_knowledge_vector_store(file_path_list, knowledge_base_id)
-        for file_path in file_path_list:    # 上传知识库后删除文件
+        for file_path in file_path_list:  # 上传知识库后删除文件
             os.remove(file_path)
         if len(loaded_files) == len(file_path_list):
             file_status = f"文件 {', '.join([os.path.split(i)[-1] for i in loaded_files])} 上传成功"
@@ -383,6 +383,63 @@ async def bing_search_chat(
     )
 
 
+async def local_doc_chat_with_keyword(
+        knowledge_base_id: str = Body(..., description="Knowledge Base Name", example="kb1"),
+        question: str = Body(..., description="Question", example="工伤保险是什么？"),
+        keyword: str = Body(..., description="Question", example="工伤保险是"),
+        streaming: bool = Body(False, description="是否开启流式输出，默认false，有些模型可能不支持。"),
+        history: List[List[Optional[str]]] = Body(
+            [],
+            description="History of previous questions and answers",
+            example=[
+                [
+                    "工伤保险是什么？",
+                    "工伤保险是指用人单位按照国家规定，为本单位的职工和用人单位的其他人员，缴纳工伤保险费，由保险机构按照国家规定的标准，给予工伤保险待遇的社会保险制度。",
+                ]
+            ],
+        ),
+):
+    if not local_doc_qa.check_knowledge_in_collections(knowledge_base_id):
+        # return BaseResponse(code=404, msg=f"Knowledge base {knowledge_base_id} not found")
+        return ChatMessage(
+            question=question,
+            response=f"Knowledge base {knowledge_base_id} not found",
+            history=history,
+            source_documents=[],
+        )
+    else:
+        if (streaming):
+            def generate_answer():
+                last_print_len = 0
+                for resp, next_history in local_doc_qa.get_knowledge_based_answer(
+                        query=question, knowledge_name=knowledge_base_id, chat_history=history, streaming=True,
+                        keyword=keyword
+                ):
+                    yield resp["result"][last_print_len:]
+                    last_print_len = len(resp["result"])
+
+            return StreamingResponse(generate_answer())
+        else:
+            for resp, history in local_doc_qa.get_knowledge_based_answer(
+                    query=question, knowledge_name=knowledge_base_id, chat_history=history, streaming=True,
+                    keyword=keyword
+            ):
+                pass
+
+            source_documents = [
+                f"""出处 [{inum + 1}] {os.path.split(doc.metadata['source'])[-1]}：\n\n{doc.page_content}\n\n"""
+                f"""距离：{doc.metadata['score']}\n\n"""
+                for inum, doc in enumerate(resp["source_documents"])
+            ]
+
+            return ChatMessage(
+                question=question,
+                response=resp["result"],
+                history=history,
+                source_documents=source_documents,
+            )
+
+
 async def chat(
         question: str = Body(..., description="Question", example="工伤保险是什么？"),
         streaming: bool = Body(False, description="是否开启流式输出，默认false，有些模型可能不支持。"),
@@ -542,7 +599,9 @@ def api_start(host, port, **kwargs):
     app.post("/local_doc_qa/create_knowledge_base", response_model=BaseResponse, summary="创建知识库")(create_knowledge)
     app.post("/local_doc_qa/upload_file", response_model=BaseResponse, summary="上传文件到知识库")(upload_file)
     app.post("/local_doc_qa/upload_files", response_model=BaseResponse, summary="批量上传文件到知识库")(upload_files)
-    app.post("/local_doc_qa/local_doc_chat", response_model=ChatMessage, summary="与知识库对话")(local_doc_chat)
+    app.post("/local_doc_qa/local_doc_chat", response_model=ChatMessage, summary="与知识库对话，根据问题搜索知识")(local_doc_chat)
+    app.post("/local_doc_qa/local_doc_chat_with_keyword", response_model=ChatMessage,
+             summary="与知识库对话，根据关键词搜索知识")(local_doc_chat_with_keyword)
     app.post("/local_doc_qa/bing_search_chat", response_model=ChatMessage, summary="与必应搜索对话")(bing_search_chat)
     app.get("/local_doc_qa/list_knowledge_base", response_model=ListDocsResponse, summary="获取知识库列表")(list_kbs)
     app.get("/local_doc_qa/list_files", response_model=ListDocsResponse, summary="获取知识库内的文件列表")(list_docs)

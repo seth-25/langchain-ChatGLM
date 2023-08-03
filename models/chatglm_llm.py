@@ -2,6 +2,8 @@ from abc import ABC
 from langchain.chains.base import Chain
 from typing import Any, Dict, List, Optional, Generator
 from langchain.callbacks.manager import CallbackManagerForChainRun
+
+from configs.model_config import HISTORY_LEN, TOP_P, TEMPERATURE, MAX_LENGTH
 # from transformers.generation.logits_process import LogitsProcessor
 # from transformers.generation.utils import LogitsProcessorList, StoppingCriteriaList
 from models.loader import LoaderCheckPoint
@@ -14,15 +16,15 @@ import transformers
 
 
 class ChatGLMLLMChain(BaseAnswer, Chain, ABC):
-    max_token: int = 10000
-    temperature: float = 0.01
+    max_length: int = MAX_LENGTH
+    temperature: float = TEMPERATURE
     # 相关度
-    top_p = 0.3
+    top_p: float = TOP_P
     # 候选词数量
     top_k = 10
     checkPoint: LoaderCheckPoint = None
     # history = []
-    history_len: int = 10
+    history_len: int = HISTORY_LEN
     streaming_key: str = "streaming"  #: :meta private:
     history_key: str = "history"  #: :meta private:
     prompt_key: str = "prompt"  #: :meta private:
@@ -31,7 +33,6 @@ class ChatGLMLLMChain(BaseAnswer, Chain, ABC):
     def __init__(self, checkPoint: LoaderCheckPoint = None):
         super().__init__()
         self.checkPoint = checkPoint
-
     @property
     def _chain_type(self) -> str:
         return "ChatGLMLLMChain"
@@ -71,6 +72,7 @@ class ChatGLMLLMChain(BaseAnswer, Chain, ABC):
         history = inputs[self.history_key]
         streaming = inputs[self.streaming_key]
         prompt = inputs[self.prompt_key]
+        print("self.temperature", self.temperature, self.top_p, self.max_length, self.history_len)
         print(f"__call:{prompt}")
         # Create the StoppingCriteriaList with the stopping strings
         stopping_criteria_list = transformers.StoppingCriteriaList()
@@ -83,7 +85,7 @@ class ChatGLMLLMChain(BaseAnswer, Chain, ABC):
                     self.checkPoint.tokenizer,
                     prompt,
                     history=history[-self.history_len:-1] if self.history_len > 0 else [],
-                    max_length=self.max_token,
+                    max_length=self.max_length,
                     temperature=self.temperature,
                     top_p=self.top_p,
                     top_k=self.top_k,
@@ -101,7 +103,7 @@ class ChatGLMLLMChain(BaseAnswer, Chain, ABC):
                 self.checkPoint.tokenizer,
                 prompt,
                 history=history[-self.history_len:] if self.history_len > 0 else [],
-                max_length=self.max_token,
+                max_length=self.max_length,
                 temperature=self.temperature,
                 top_p=self.top_p,
                 top_k=self.top_k,
@@ -114,4 +116,3 @@ class ChatGLMLLMChain(BaseAnswer, Chain, ABC):
             answer_result.llm_output = {"answer": response}
 
             generate_with_callback(answer_result)
-
