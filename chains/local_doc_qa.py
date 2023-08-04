@@ -32,29 +32,6 @@ CONNECTION_STRING = MyAnalyticDB.connection_string_from_db_params(
 )
 
 
-def tree(filepath, ignore_dir_names=None, ignore_file_names=None):
-    """返回两个列表，第一个列表为 filepath 下全部文件的完整路径, 第二个为对应的文件名"""
-    if ignore_dir_names is None:
-        ignore_dir_names = []
-    if ignore_file_names is None:
-        ignore_file_names = []
-    ret_list = []
-    if isinstance(filepath, str):
-        if not os.path.exists(filepath):
-            print("路径不存在")
-            return None, None
-        elif os.path.isfile(filepath) and os.path.basename(filepath) not in ignore_file_names:
-            return [filepath], [os.path.basename(filepath)]
-        elif os.path.isdir(filepath) and os.path.basename(filepath) not in ignore_dir_names:
-            for file in os.listdir(filepath):
-                fullfilepath = os.path.join(filepath, file)
-                if os.path.isfile(fullfilepath) and os.path.basename(fullfilepath) not in ignore_file_names:
-                    ret_list.append(fullfilepath)
-                if os.path.isdir(fullfilepath) and os.path.basename(fullfilepath) not in ignore_dir_names:
-                    ret_list.extend(tree(fullfilepath, ignore_dir_names, ignore_file_names)[0])
-    return ret_list, [os.path.basename(p) for p in ret_list]
-
-
 def load_file(filepath, sentence_size=SENTENCE_SIZE, using_zh_title_enhance=ZH_TITLE_ENHANCE, url: str = ""):
     if filepath.lower().endswith(".md"):
         # loader = UnstructuredFileLoader(filepath, mode="elements")
@@ -168,52 +145,20 @@ class LocalDocQA:
 
     # 上传文件并创建知识库
     def init_knowledge_vector_store(self,
-                                    filepath: str or List[str],
+                                    filepath: List[str],
                                     knowledge_name: str,
                                     sentence_size=SENTENCE_SIZE, url: str = ""):
         print(f"初始化 {knowledge_name}")
         loaded_files = []
-        failed_files = []
         docs = []
-        if isinstance(filepath, str):
-            if not os.path.exists(filepath):
-                print("路径不存在")
-                return None
-            elif os.path.isfile(filepath):
-                file = os.path.split(filepath)[-1]
-                try:
-                    docs = load_file(filepath, sentence_size, url=url)
-                    logger.info(f"{file} 已成功加载")
-                    loaded_files.append(filepath)
-                except Exception as e:
-                    logger.error(e)
-                    logger.info(f"{file} 未能成功加载")
-                    return None
-            elif os.path.isdir(filepath):
-                docs = []
-                for fullfilepath, file in tqdm(zip(*tree(filepath, ignore_dir_names=['tmp_files'])), desc="加载文件"):
-                    try:
-                        docs += load_file(fullfilepath, sentence_size, url=url)
-                        loaded_files.append(fullfilepath)
-                    except Exception as e:
-                        logger.error(e)
-                        failed_files.append(file)
-
-                if len(failed_files) > 0:
-                    logger.info("以下文件未能成功加载：")
-                    for file in failed_files:
-                        logger.info(f"{file}\n")
-
-        else:
-            docs = []
-            for file in filepath:
-                try:
-                    docs += load_file(file, sentence_size, url=url)
-                    logger.info(f"{file} 已成功加载")
-                    loaded_files.append(file)
-                except Exception as e:
-                    logger.error(e)
-                    logger.info(f"{file} 未能成功加载")
+        for file in filepath:
+            try:
+                docs += load_file(file, sentence_size, url=url)
+                logger.info(f"{file} 已成功加载")
+                loaded_files.append(file)
+            except Exception as e:
+                logger.error(e)
+                logger.info(f"{file} 未能成功加载")
         if len(docs) > 0:
             logger.info("文件加载完毕，正在生成向量库")
             if not knowledge_name:

@@ -160,7 +160,6 @@ def reinit_model(llm_model, embedding_model, llm_history_len, llm_max_length, ll
 
 
 def get_vector_store(knowledge_name, files, sentence_size, chatbot, url=""):
-    print("files", files, type(files))
     if local_doc_qa.llm_model_chain and local_doc_qa.embeddings:
         knowledge_files = local_doc_qa.list_file_from_vector_store(knowledge_name)
         if not isinstance(files, list):
@@ -281,26 +280,6 @@ def add_vs_name(knowledge_name, chatbot):
         return gr.update(visible=True, choices=get_vs_list(), value=knowledge_name), \
             gr.update(visible=False), gr.update(visible=False), \
             gr.update(visible=True), chatbot, gr.update(visible=True)
-
-
-# 自动化加载固定文件间中文件
-def reinit_vector_store(knowledge_name, chatbot):
-    try:
-        # shutil.rmtree(os.path.join(KB_ROOT_PATH, knowledge_name, "vector_store"))
-        # vs_path = os.path.join(KB_ROOT_PATH, knowledge_name, "vector_store")
-        sentence_size = gr.Number(value=SENTENCE_SIZE, precision=0,
-                                  label="文本入库分句长度限制",
-                                  interactive=True, visible=True)
-        knowledge_name, loaded_files = local_doc_qa.init_knowledge_vector_store(
-            os.path.join(KB_ROOT_PATH, knowledge_name, "content"),
-            knowledge_name, sentence_size)
-        model_status = """知识库构建成功"""
-    except Exception as e:
-        logger.error(e)
-        model_status = """知识库构建未成功"""
-        logger.info(model_status)
-    return chatbot + [[None, model_status]]
-
 
 def refresh_vs_list():
     knowledge_list = get_vs_list()
