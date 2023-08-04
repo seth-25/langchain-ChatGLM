@@ -55,7 +55,7 @@ def tree(filepath, ignore_dir_names=None, ignore_file_names=None):
     return ret_list, [os.path.basename(p) for p in ret_list]
 
 
-def load_file(filepath, sentence_size=SENTENCE_SIZE, using_zh_title_enhance=ZH_TITLE_ENHANCE):
+def load_file(filepath, sentence_size=SENTENCE_SIZE, using_zh_title_enhance=ZH_TITLE_ENHANCE, url: str = ""):
     if filepath.lower().endswith(".md"):
         # loader = UnstructuredFileLoader(filepath, mode="elements")
         # docs = loader.load()
@@ -87,7 +87,9 @@ def load_file(filepath, sentence_size=SENTENCE_SIZE, using_zh_title_enhance=ZH_T
     if using_zh_title_enhance:
         docs = zh_title_enhance(docs)
     # write_check_file(filepath, docs)
-
+    if len(url) > 0:
+        for doc in docs:
+            doc.metadata['url'] = url
     return docs
 
 
@@ -168,7 +170,7 @@ class LocalDocQA:
     def init_knowledge_vector_store(self,
                                     filepath: str or List[str],
                                     knowledge_name: str,
-                                    sentence_size=SENTENCE_SIZE):
+                                    sentence_size=SENTENCE_SIZE, url: str = ""):
         print(f"初始化 {knowledge_name}")
         loaded_files = []
         failed_files = []
@@ -180,7 +182,7 @@ class LocalDocQA:
             elif os.path.isfile(filepath):
                 file = os.path.split(filepath)[-1]
                 try:
-                    docs = load_file(filepath, sentence_size)
+                    docs = load_file(filepath, sentence_size, url=url)
                     logger.info(f"{file} 已成功加载")
                     loaded_files.append(filepath)
                 except Exception as e:
@@ -191,7 +193,7 @@ class LocalDocQA:
                 docs = []
                 for fullfilepath, file in tqdm(zip(*tree(filepath, ignore_dir_names=['tmp_files'])), desc="加载文件"):
                     try:
-                        docs += load_file(fullfilepath, sentence_size)
+                        docs += load_file(fullfilepath, sentence_size, url=url)
                         loaded_files.append(fullfilepath)
                     except Exception as e:
                         logger.error(e)
@@ -206,7 +208,7 @@ class LocalDocQA:
             docs = []
             for file in filepath:
                 try:
-                    docs += load_file(file)
+                    docs += load_file(file, sentence_size, url=url)
                     logger.info(f"{file} 已成功加载")
                     loaded_files.append(file)
                 except Exception as e:

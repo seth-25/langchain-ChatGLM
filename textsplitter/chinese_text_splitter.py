@@ -59,17 +59,17 @@ class ChineseTextSplitter(CharacterTextSplitter):
             merged_texts_list.append(merged_texts)
         return merged_texts_list
 
-    def split_text(self, text: str) -> List[str]:  # 此处需要进一步优化逻辑
+    def split_text(self, text: str) -> List[str]:
         if self.pdf:
             text = re.sub(r'(\s*\n)+', r'\n', text)  # 多行空白行换成一行
             text = re.sub(r'\s+', r' ', text)  # ocr会将很多连贯内容分割成不同行，替换成只用空格隔开，使其分割优先级小于句号
-            text = re.sub(r"\.{7,}", "", text)  # 多余6个省略号，可能是目录识别乱码
+            text = re.sub(r'\.{7,}', '', text)  # 多余6个省略号，可能是目录识别乱码
 
         # 单字符断句符，将断句符前后拆成两段。
         # 如果双引号前有终止符，那么双引号才是句子的终点，把分句符\n放到双引号后
         text = re.sub(r'([;；!?。！？]["’”」』]{0,2})([^;；!?。！？])', r'\1\n\2', text)  # 排除两个符号紧挨着的情况，如?!
-        text = re.sub(r'(\.)( )', r"\1\n\2", text)  # .后面跟的是空格才是英文句号，才需要分开，否则可能是小数或者网址
-        text = re.sub(r'(…{2})([^"’”」』])', r"\1\n\2", text)  # 中文省略号
+        text = re.sub(r'(\.)( )', r'\1\n\2', text)  # .后面跟的是空格才是英文句号，才需要分开，否则可能是小数或者网址
+        text = re.sub(r'(…{2})([^"’”」』])', r'\1\n\2', text)  # 中文省略号
         text = re.sub(r'(\s*\n)+', r'\n', text)  # 多行空白行换成一行
         text_list = [i for i in text.split("\n") if i]
         for t in text_list:

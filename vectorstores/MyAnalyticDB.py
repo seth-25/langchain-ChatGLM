@@ -558,7 +558,7 @@ class MyAnalyticDB(VectorStore):
 
                     # 拼上该方向的文本超长度了，或不是同个文件，这个方向不再拼
                     if docs_len + len(t_result.document) > self.chunk_size or \
-                            t_result.metadata["source"] != result.metadata["source"]:
+                            t_result.source != result.source:
                         if is_left:
                             i = sys.maxsize
                         else:

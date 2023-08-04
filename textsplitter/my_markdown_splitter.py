@@ -1,8 +1,8 @@
 import re
-from langchain.document_loaders import UnstructuredFileLoader, TextLoader
+from langchain.document_loaders import TextLoader
 from langchain.text_splitter import MarkdownHeaderTextSplitter, RecursiveCharacterTextSplitter
 from langchain.docstore.document import Document
-from typing import Dict, List, Tuple, TypedDict, Any, Optional
+from typing import List, Any, Optional
 
 from configs.model_config import *
 
@@ -15,26 +15,24 @@ md_headers = [
     ("######", "Header 6"),
 ]
 
+
 def _split_text_with_regex(
-    text: str, separator: str, keep_separator: bool
+        text: str, separator: str, keep_separator: bool
 ) -> List[str]:
     # Now that we have the separator, split the text
     if separator:
         if keep_separator:
             # The parentheses in the pattern keep the delimiters in the result.
             _splits = re.split(f"({separator})", text)
-            # print("_splits", _splits)
             splits = [_splits[i] + _splits[i + 1] for i in range(0, len(_splits) - 1, 2)]
             if len(_splits) % 2 == 1:
                 splits += _splits[-1:]
-            # if len(_splits) % 2 == 0:
-            #     splits += _splits[-1:]
-            # splits = [_splits[0]] + splits
         else:
             splits = re.split(separator, text)
     else:
         splits = list(text)
     return [s for s in splits if s != ""]
+
 
 class MyRecursiveCharacterTextSplitter(RecursiveCharacterTextSplitter):
     def __init__(
@@ -61,12 +59,8 @@ class MyRecursiveCharacterTextSplitter(RecursiveCharacterTextSplitter):
                 separator = _s
                 new_separators = separators[i + 1:]
                 break
-        # print()
-        # print("separator", [separator], "new_separators", [new_separators])
 
         splits = _split_text_with_regex(text, separator, self._keep_separator)
-
-        # print("splits", splits)
 
         # Now go merging things, recursively splitting longer texts.
         _good_splits = []
@@ -88,7 +82,6 @@ class MyRecursiveCharacterTextSplitter(RecursiveCharacterTextSplitter):
             merged_text = self._merge_splits(_good_splits, _separator)
             final_chunks.extend(merged_text)
 
-        # print("final_chunks", final_chunks)
         return final_chunks
 
 

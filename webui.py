@@ -1,6 +1,7 @@
 import gradio as gr
 import shutil
 
+
 from chains.local_doc_qa import LocalDocQA
 from configs.model_config import *
 import nltk
@@ -67,7 +68,10 @@ def get_answer(query, keyword, knowledge_name, chatbot, history, mode, score_thr
             source = ""
             for i, doc in enumerate(resp["source_documents"]):
                 doc_page_content = doc.page_content.replace('\n', '<br>')
-                source += f"""<details> <summary>【出处{i + 1}】：{os.path.split(doc.metadata["source"])[-1]} &nbsp;&nbsp;&nbsp; 【距离】：{doc.metadata['score']}</summary>"""
+                if "url" in doc.metadata.keys():
+                    source += f"""<details> <summary>【出处{i + 1}】：{os.path.split(doc.metadata["source"])[-1]} {doc.metadata["url"]} &nbsp;&nbsp;&nbsp; 【距离】：{doc.metadata['score']}</summary>"""
+                else:
+                    source += f"""<details> <summary>【出处{i + 1}】：{os.path.split(doc.metadata["source"])[-1]} &nbsp;&nbsp;&nbsp; 【距离】：{doc.metadata['score']}</summary>"""
                 source += f"""{doc_page_content}"""
                 source += f"""</details>"""
             history[-1][-1] += source  # 模型答案加上出处，一起加入history中
@@ -155,41 +159,49 @@ def reinit_model(llm_model, embedding_model, llm_history_len, llm_max_length, ll
     return chatbot + [[None, model_status]]
 
 
-def get_vector_store(knowledge_name, files, sentence_size, chatbot, one_content, one_content_segmentation):
+def get_vector_store(knowledge_name, files, sentence_size, chatbot, url=""):
+    print("files", files, type(files))
     if local_doc_qa.llm_model_chain and local_doc_qa.embeddings:
-        # print("files", files, type(files))
         knowledge_files = local_doc_qa.list_file_from_vector_store(knowledge_name)
-        # print("knowledge_files", knowledge_files)
-        if isinstance(files, list):
-            file_path_list = []
-            for file in files:
-                filename = os.path.split(file.name)[-1]  # file.name是路径
-                if filename in knowledge_files:  # 文件已在知识库存在
-                    continue
-                file_path = os.path.join(KB_ROOT_PATH, filename)
-                shutil.move(file.name, file_path)  # 将文件上传到服务器
-                # print("webui list", filename, file.name)
-                file_path_list.append(file_path)
-            if len(file_path_list) > 0:
-                knowledge_name, loaded_files = local_doc_qa.init_knowledge_vector_store(file_path_list, knowledge_name,
-                                                                                        sentence_size)
-                for file_path in file_path_list:  # 上传完成后删除暂存的文件
-                    os.remove(file_path)
+        if not isinstance(files, list):
+            files = [files]
+        file_path_list = []
+        for file in files:
+            filename = os.path.split(file.name)[-1]  # file.name是路径
+            if filename in knowledge_files:  # 文件已在知识库存在
+                continue
+            file_path = os.path.join(KB_ROOT_PATH, filename)
+            shutil.move(file.name, file_path)  # 将文件上传到服务器
+            # print("webui list", filename, file.name)
+            file_path_list.append(file_path)
+        if len(file_path_list) > 0:
+            knowledge_name, loaded_files = local_doc_qa.init_knowledge_vector_store(file_path_list, knowledge_name,
+                                                                                    sentence_size, url)
+            for file_path in file_path_list:  # 上传完成后删除暂存的文件
+                os.remove(file_path)
 
-                if len(loaded_files) == len(file_path_list):
-                    file_status = f"已添加 {'、'.join([os.path.split(i)[-1] for i in loaded_files if i])} 内容至知识库，并已加载知识库，请开始提问"
-                else:
-                    file_status = "文件未成功加载，请重新上传文件"
-            else:
-                file_status = "文件已在知识库存在"
-        else:
-            # print("webui", files)
-            knowledge_name, loaded_files = local_doc_qa.one_knowledge_add(knowledge_name, files, one_content,
-                                                                          one_content_segmentation, sentence_size)
-            if len(loaded_files):
+            if len(loaded_files) == len(file_path_list):
                 file_status = f"已添加 {'、'.join([os.path.split(i)[-1] for i in loaded_files if i])} 内容至知识库，并已加载知识库，请开始提问"
             else:
                 file_status = "文件未成功加载，请重新上传文件"
+        else:
+            file_status = "文件已在知识库存在"
+    else:
+        file_status = "模型未完成加载，请先在加载模型后再导入文件"
+        knowledge_name = None
+    logger.info(file_status)
+    return knowledge_name, None, chatbot + [[None, file_status]], \
+        gr.update(choices=local_doc_qa.list_file_from_vector_store(knowledge_name) if knowledge_name else [])
+
+
+def get_vector_store_one_content(knowledge_name, one_title, sentence_size, chatbot, one_content, one_content_segmentation):
+    if local_doc_qa.llm_model_chain and local_doc_qa.embeddings:
+        knowledge_name, loaded_files = local_doc_qa.one_knowledge_add(knowledge_name, one_title, one_content,
+                                                                      one_content_segmentation, sentence_size)
+        if len(loaded_files):
+            file_status = f"已添加 {'、'.join([os.path.split(i)[-1] for i in loaded_files if i])} 内容至知识库，并已加载知识库，请开始提问"
+        else:
+            file_status = "文件未成功加载，请重新上传文件"
     else:
         file_status = "模型未完成加载，请先在加载模型后再导入文件"
         knowledge_name = None
@@ -419,6 +431,13 @@ with gr.Blocks(css=block_css, theme=gr.themes.Default(**default_theme_args)) as 
                                             file_count="multiple",
                                             show_label=False)
                             load_file_button = gr.Button("上传文件并加载知识库")
+                        with gr.Tab("上传文件和URL"):
+                            file_with_url = gr.File(label="添加文件",
+                                                    file_types=['.txt', '.md', '.docx', '.pdf', '.png', '.jpg', ".csv"],
+                                                    file_count="single",
+                                                    show_label=False)
+                            url_input = gr.Textbox(label="文件url")
+                            load_file_with_url_button = gr.Button("上传文件和URL并加载知识库")
                         with gr.Tab("上传文件夹"):
                             folder_files = gr.File(label="添加文件",
                                                    file_count="directory",
@@ -444,13 +463,16 @@ with gr.Blocks(css=block_css, theme=gr.themes.Default(**default_theme_args)) as 
                                               vs_delete])
                     load_file_button.click(get_vector_store,
                                            show_progress=True,
-                                           inputs=[select_vs, files, sentence_size, chatbot, vs_add, vs_add],
+                                           inputs=[select_vs, files, sentence_size, chatbot],
                                            outputs=[knowledge_name, files, chatbot, files_to_delete], )
                     load_folder_button.click(get_vector_store,
                                              show_progress=True,
-                                             inputs=[select_vs, folder_files, sentence_size, chatbot, vs_add,
-                                                     vs_add],
+                                             inputs=[select_vs, folder_files, sentence_size, chatbot],
                                              outputs=[knowledge_name, folder_files, chatbot, files_to_delete], )
+                    load_file_with_url_button.click(get_vector_store,
+                                                    show_progress=True,
+                                                    inputs=[select_vs, file_with_url, sentence_size, chatbot, url_input],
+                                                    outputs=[knowledge_name, file_with_url, chatbot, files_to_delete], )
                     flag_csv_logger.setup([query, knowledge_name, chatbot, mode], "flagged")
                     delete_file_button.click(delete_file,
                                              show_progress=True,
@@ -530,11 +552,11 @@ with gr.Blocks(css=block_css, theme=gr.themes.Default(**default_theme_args)) as 
                                                    show_label=False)
                             load_folder_button = gr.Button("上传文件夹并加载知识库")
                         with gr.Tab("添加单条内容"):
-                            one_title = gr.Textbox(label="标题", placeholder="请输入要添加单条段落的标题", lines=1)
-                            one_conent = gr.Textbox(label="内容", placeholder="请输入要添加单条段落的内容", lines=5)
+                            one_title = gr.Textbox(label="文件名", placeholder="请输入要添加单条段落的文件名", lines=1)
+                            one_content = gr.Textbox(label="内容", placeholder="请输入要添加单条段落的内容", lines=5)
                             one_content_segmentation = gr.Checkbox(value=True, label="禁止内容分句入库",
                                                                    interactive=True)
-                            load_conent_button = gr.Button("添加内容并加载知识库")
+                            load_content_button = gr.Button("添加内容并加载知识库")
                     # 将上传的文件保存到content文件夹下,并更新下拉框
                     vs_refresh.click(fn=refresh_vs_list,
                                      inputs=[],
@@ -547,18 +569,17 @@ with gr.Blocks(css=block_css, theme=gr.themes.Default(**default_theme_args)) as 
                                           outputs=[vs_name, vs_add, file2vs, knowledge_name, chatbot])
                     load_file_button.click(get_vector_store,
                                            show_progress=True,
-                                           inputs=[select_vs_test, files, sentence_size, chatbot, vs_add, vs_add],
+                                           inputs=[select_vs_test, files, sentence_size, chatbot],
                                            outputs=[knowledge_name, files, chatbot], )
                     load_folder_button.click(get_vector_store,
                                              show_progress=True,
-                                             inputs=[select_vs_test, folder_files, sentence_size, chatbot, vs_add,
-                                                     vs_add],
+                                             inputs=[select_vs_test, folder_files, sentence_size, chatbot],
                                              outputs=[knowledge_name, folder_files, chatbot], )
-                    load_conent_button.click(get_vector_store,
-                                             show_progress=True,
-                                             inputs=[select_vs_test, one_title, sentence_size, chatbot,
-                                                     one_conent, one_content_segmentation],
-                                             outputs=[knowledge_name, files, chatbot], )
+                    load_content_button.click(get_vector_store_one_content,
+                                              show_progress=True,
+                                              inputs=[select_vs_test, one_title, sentence_size, chatbot,
+                                                      one_content, one_content_segmentation],
+                                              outputs=[knowledge_name, files, chatbot], )
                     flag_csv_logger.setup([query, knowledge_name, chatbot, mode], "flagged")
                     query.submit(get_answer,
                                  [query, query, knowledge_name, chatbot, history, mode, score_threshold,
