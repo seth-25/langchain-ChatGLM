@@ -315,10 +315,9 @@ async def local_doc_chat(
         ),
 ):
     if not local_doc_qa.check_knowledge_in_collections(knowledge_base_id):
-        # return BaseResponse(code=404, msg=f"Knowledge base {knowledge_base_id} not found")
         return ChatMessage(
             question=question,
-            response=f"Knowledge base {knowledge_base_id} not found",
+            response=f"知识库 {knowledge_base_id} 不存在",
             history=history,
             source_documents=[],
         )
@@ -400,10 +399,9 @@ async def local_doc_chat_with_keyword(
         ),
 ):
     if not local_doc_qa.check_knowledge_in_collections(knowledge_base_id):
-        # return BaseResponse(code=404, msg=f"Knowledge base {knowledge_base_id} not found")
         return ChatMessage(
             question=question,
-            response=f"Knowledge base {knowledge_base_id} not found",
+            response=f"知识库 {knowledge_base_id} 不存在",
             history=history,
             source_documents=[],
         )
@@ -489,7 +487,7 @@ async def stream_chat(websocket: WebSocket):
             "knowledge_base_id"]
 
         if not local_doc_qa.check_knowledge_in_collections(knowledge_base_id):
-            await websocket.send_json({"error": f"Knowledge base {knowledge_base_id} not found"})
+            await websocket.send_json({"error": f"知识库 {knowledge_base_id} 不存在"})
             await websocket.close()
             return
 
