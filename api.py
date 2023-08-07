@@ -406,7 +406,7 @@ async def local_doc_chat_with_keyword(
             source_documents=[],
         )
     else:
-        if (streaming):
+        if streaming:
             def generate_answer():
                 last_print_len = 0
                 for resp, next_history in local_doc_qa.get_knowledge_based_answer(

@@ -1,6 +1,7 @@
 import gradio as gr
 import shutil
 
+import markdown
 
 from chains.local_doc_qa import LocalDocQA
 from configs.model_config import *
@@ -61,9 +62,14 @@ def parse_text(text):
                     line = line.replace("(", "&#40;")
                     line = line.replace(")", "&#41;")
                     line = line.replace("$", "&#36;")
-                lines[i] = "<br>"+line
+                lines[i] = "<br>" + line
     text = "".join(lines)
     return text
+
+
+def markdown_to_html(md_text):
+    return markdown.markdown(md_text)
+
 
 def get_answer(query, keyword, knowledge_name, chatbot, history, mode, score_threshold=VECTOR_SEARCH_SCORE_THRESHOLD,
                vector_search_top_k=VECTOR_SEARCH_TOP_K, chunk_content: bool = True, chunk_size=CHUNK_SIZE,
@@ -82,6 +88,7 @@ def get_answer(query, keyword, knowledge_name, chatbot, history, mode, score_thr
     local_doc_qa.top_k = vector_search_top_k
 
     chatbot.append([])  # chatbot添加新的一条回答
+
     if mode == "Bing搜索问答":
         for resp, history in local_doc_qa.get_search_result_based_answer(
                 query=query, chat_history=history, streaming=streaming):
@@ -97,19 +104,28 @@ def get_answer(query, keyword, knowledge_name, chatbot, history, mode, score_thr
             chatbot[-1] = history[-1]
             yield chatbot, history, "", ""
     elif mode == "知识库问答" and local_doc_qa.check_knowledge_in_collections(knowledge_name):
+        chatbot.append([])
         for resp, history in local_doc_qa.get_knowledge_based_answer(
                 query=query, knowledge_name=knowledge_name, chat_history=history, streaming=streaming, keyword=keyword):
-            source = ""
+            source = "\n\n"
             for i, doc in enumerate(resp["source_documents"]):
-                doc_page_content = doc.metadata["content"].replace('\n', '<br>')
                 if "url" in doc.metadata.keys():
                     source += f"""<details> <summary>【出处{i + 1}】：{os.path.split(doc.metadata["source"])[-1]} {doc.metadata["url"]} &nbsp;&nbsp;&nbsp; 【距离】：{doc.metadata['score']}</summary>"""
                 else:
                     source += f"""<details> <summary>【出处{i + 1}】：{os.path.split(doc.metadata["source"])[-1]} &nbsp;&nbsp;&nbsp; 【距离】：{doc.metadata['score']}</summary>"""
-                source += f"""{doc_page_content}"""
+                if os.path.split(doc.metadata["source"])[-1].lower().endswith(".md"):   # 是markdown
+                    doc_page_content = doc.metadata["content"].replace('\n', '\n\n')    # 要双回车markdown_to_html才能识别格式
+                    source += f"""{markdown_to_html(doc_page_content)}"""
+                else:
+                    doc_page_content = doc.metadata["content"].replace('\n', '<br>')
+                    source += f"""{doc_page_content}"""
                 source += f"""</details>"""
-            history[-1][-1] += source  # 模型答案加上出处，一起加入history中
-            chatbot[-1] = history[-1]
+
+            chatbot[-2] = history[-1]
+            chatbot[-1] = [None, source]
+
+            # history[-1][-1] += source  # 模型答案加上出处，一起加入history中
+            # chatbot[-1] = history[-1]
             yield chatbot, history, "", ""
     elif mode == "知识库测试":
         if local_doc_qa.check_knowledge_in_collections(knowledge_name):
@@ -119,7 +135,7 @@ def get_answer(query, keyword, knowledge_name, chatbot, history, mode, score_thr
                                "根据您的设定，没有匹配到任何内容，请确认您设置的知识距离 Score 阈值是否过小或其他参数是否正确。"]
                 yield chatbot, history, "", ""
             else:
-                source = ""
+                source = "\n\n"
                 for i, doc in enumerate(resp["source_documents"]):
                     doc_page_content = doc.page_content.replace('\n', '<br>')
                     source += f"""<details> <summary>【出处{i + 1}】：{os.path.split(doc.metadata["source"])[-1]} &nbsp;&nbsp;&nbsp; 【距离】：{doc.metadata['score']}</summary>"""
@@ -226,7 +242,8 @@ def get_vector_store(knowledge_name, files, sentence_size, chatbot, url=""):
         gr.update(choices=local_doc_qa.list_file_from_vector_store(knowledge_name) if knowledge_name else [])
 
 
-def get_vector_store_one_content(knowledge_name, one_title, sentence_size, chatbot, one_content, one_content_segmentation):
+def get_vector_store_one_content(knowledge_name, one_title, sentence_size, chatbot, one_content,
+                                 one_content_segmentation):
     if local_doc_qa.llm_model_chain and local_doc_qa.embeddings:
         knowledge_name, loaded_files = local_doc_qa.one_knowledge_add(knowledge_name, one_title, one_content,
                                                                       one_content_segmentation, sentence_size)
@@ -313,6 +330,7 @@ def add_vs_name(knowledge_name, chatbot):
         return gr.update(visible=True, choices=get_vs_list(), value=knowledge_name), \
             gr.update(visible=False), gr.update(visible=False), \
             gr.update(visible=True), chatbot, gr.update(visible=True)
+
 
 def refresh_vs_list():
     knowledge_list = get_vs_list()
@@ -483,7 +501,8 @@ with gr.Blocks(css=block_css, theme=gr.themes.Default(**default_theme_args)) as 
                                              outputs=[knowledge_name, folder_files, chatbot, files_to_delete], )
                     load_file_with_url_button.click(get_vector_store,
                                                     show_progress=True,
-                                                    inputs=[select_vs, file_with_url, sentence_size, chatbot, url_input],
+                                                    inputs=[select_vs, file_with_url, sentence_size, chatbot,
+                                                            url_input],
                                                     outputs=[knowledge_name, file_with_url, chatbot, files_to_delete], )
                     flag_csv_logger.setup([query, knowledge_name, chatbot, mode], "flagged")
                     delete_file_button.click(delete_file,
