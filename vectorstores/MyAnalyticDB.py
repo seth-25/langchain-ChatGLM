@@ -445,6 +445,7 @@ class MyAnalyticDB(VectorStore):
             if 0 < self.score_threshold < result.distance:
                 continue
             result.metadata["score"] = round(result.distance, 3) if self.embedding_function is not None else None
+            result.metadata["content"] = result.document
             documents_with_scores.append((
                 Document(
                     page_content=result.document,
@@ -532,7 +533,7 @@ class MyAnalyticDB(VectorStore):
                 # for rid, r_result in enumerate(right_results):
                 #     print(rid, len(r_result.document), "(", r_result.id, [r_result.document], ")")
 
-                i = j = 0   # i,j = sys.maxsize表示该方向不再可拼
+                i = j = 0  # i,j = sys.maxsize表示该方向不再可拼
                 if len(left_results) == 0:  # 不存在上文
                     i = sys.maxsize
                 if len(right_results) == 0:  # 不存在下文
@@ -618,24 +619,27 @@ class MyAnalyticDB(VectorStore):
             doc_score = None
             for id in id_seq:
                 if id == id_seq[0]:
-                    res = id_map[id]
+                    result = id_map[id]
                     doc = Document(
-                        page_content=res.document,
-                        metadata=res.metadata,
+                        page_content=result.document,
+                        metadata=result.metadata,
                     )
-                    doc_score = res.distance
+                    doc.metadata["content"] = doc.page_content
+                    doc_score = result.distance
                 else:
-                    res = id_map[id]
-                    res_page_content = res.document
+                    result = id_map[id]
+                    result_page_content = result.document
+                    last_res = id_map[id - 1]  # 上一个文本
+                    # 开启标题增强的情况下，如果当前文本和上一个文本标题相同，去掉当前文本的标题。因为有时候大模型会把标题也混入答案中。
+                    if match_brackets_at_start(last_res.document) == match_brackets_at_start(result.document):
+                        result_page_content = remove_brackets_at_start(result.document)
 
                     if REMOVE_TITLE:
-                        last_res = id_map[id - 1]  # 上一个文本
-                        # 开启标题增强的情况下，如果当前文本和上一个文本标题相同，去掉当前文本的标题
-                        if match_brackets_at_start(last_res.document) == match_brackets_at_start(res.document):
-                            res_page_content = remove_brackets_at_start(res.document)
-
-                    doc.page_content += "\n" + res_page_content
-                    doc_score = min(doc_score, res.distance)
+                        doc.page_content += "\n" + result_page_content
+                    else:
+                        doc.page_content += "\n" + result.document
+                    doc.metadata["content"] += "\n" + result_page_content   # 去除标题，方便在webui显示
+                    doc_score = min(doc_score, result.distance)
             if not isinstance(doc, Document) or doc_score is None:
                 raise ValueError(f"Could not find document, got {doc}")
 

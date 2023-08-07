@@ -33,15 +33,49 @@ local_doc_qa = LocalDocQA()
 flag_csv_logger = gr.CSVLogger()
 
 
+def parse_text(text):
+    """copy from https://github.com/GaiZhenbiao/ChuanhuChatGPT/"""
+    lines = text.split("\n")
+    lines = [line for line in lines if line != ""]
+    count = 0
+    for i, line in enumerate(lines):
+        if "```" in line:
+            count += 1
+            items = line.split('`')
+            if count % 2 == 1:
+                lines[i] = f'<pre><code class="language-{items[-1]}">'
+            else:
+                lines[i] = f'<br></code></pre>'
+        else:
+            if i > 0:
+                if count % 2 == 1:
+                    line = line.replace("`", "\`")
+                    line = line.replace("<", "&lt;")
+                    line = line.replace(">", "&gt;")
+                    line = line.replace(" ", "&nbsp;")
+                    line = line.replace("*", "&ast;")
+                    line = line.replace("_", "&lowbar;")
+                    line = line.replace("-", "&#45;")
+                    line = line.replace(".", "&#46;")
+                    line = line.replace("!", "&#33;")
+                    line = line.replace("(", "&#40;")
+                    line = line.replace(")", "&#41;")
+                    line = line.replace("$", "&#36;")
+                lines[i] = "<br>"+line
+    text = "".join(lines)
+    return text
+
 def get_answer(query, keyword, knowledge_name, chatbot, history, mode, score_threshold=VECTOR_SEARCH_SCORE_THRESHOLD,
                vector_search_top_k=VECTOR_SEARCH_TOP_K, chunk_content: bool = True, chunk_size=CHUNK_SIZE,
                streaming: bool = STREAMING):
+    print("获取答案：")
     print("chunk_content", chunk_content, "chunk_size", chunk_size, "score_threshold", score_threshold,
           "vector_search_top_k", vector_search_top_k)
-    print("history", history)
-    print("keyword", keyword, type(keyword))
+    print("history")
     for h in history:
         print(h)
+    print("keyword", keyword, type(keyword))
+
     local_doc_qa.chunk_content = chunk_content
     local_doc_qa.chunk_size = chunk_size
     local_doc_qa.score_threshold = score_threshold
@@ -67,7 +101,7 @@ def get_answer(query, keyword, knowledge_name, chatbot, history, mode, score_thr
                 query=query, knowledge_name=knowledge_name, chat_history=history, streaming=streaming, keyword=keyword):
             source = ""
             for i, doc in enumerate(resp["source_documents"]):
-                doc_page_content = doc.page_content.replace('\n', '<br>')
+                doc_page_content = doc.metadata["content"].replace('\n', '<br>')
                 if "url" in doc.metadata.keys():
                     source += f"""<details> <summary>【出处{i + 1}】：{os.path.split(doc.metadata["source"])[-1]} {doc.metadata["url"]} &nbsp;&nbsp;&nbsp; 【距离】：{doc.metadata['score']}</summary>"""
                 else:
@@ -171,7 +205,6 @@ def get_vector_store(knowledge_name, files, sentence_size, chatbot, url=""):
                 continue
             file_path = os.path.join(KB_ROOT_PATH, filename)
             shutil.move(file.name, file_path)  # 将文件上传到服务器
-            # print("webui list", filename, file.name)
             file_path_list.append(file_path)
         if len(file_path_list) > 0:
             knowledge_name, loaded_files = local_doc_qa.init_knowledge_vector_store(file_path_list, knowledge_name,
