@@ -373,5 +373,6 @@ ZH_TITLE_ENHANCE = False
 CHINESE_TEXT_SPLITTER_MERGE_SPLIT = False
 
 MD_TITLE_ENHANCE = True  # 将markdown标题和文本融合
+MD_TITLE_ENHANCE_ADD_FILENAME = False  # 是否将文件名也加入markdown标题
 REMOVE_TITLE = False  # 向模型输入提问时，移除拼接文本重复的markdown标题，在开启上下文功能，且开启MD_TITLE_ENHANCE或ZH_TITLE_ENHANCE时才有效
 MD_TITLE_SPLIT = 1  # 上下文拼接时，几级标题不同就不再拼接，值为1～6

@@ -5,6 +5,7 @@ from langchain.docstore.document import Document
 from typing import List, Any, Optional
 
 from configs.model_config import *
+from utils.file_util import get_filename_from_source
 
 md_headers = [
     ("#", "Header 1"),
@@ -118,7 +119,7 @@ class MyMarkdownTextSplitter(MyRecursiveCharacterTextSplitter):
         super().__init__(separators=separators, **kwargs)
 
 
-def md_title_enhance(docs: List[Document]) -> List[Document]:
+def md_title_enhance(docs: List[Document], filepath) -> List[Document]:
     if len(docs) > 0:
         for doc in docs:
             title_list = []
@@ -126,8 +127,11 @@ def md_title_enhance(docs: List[Document]) -> List[Document]:
                 if re.match("Header", key):
                     # print(key, value)
                     title_list.append(value)
-            doc.page_content = f"【下文与({','.join(title_list)})有关】{doc.page_content}"
-
+            if MD_TITLE_ENHANCE_ADD_FILENAME:
+                filename = get_filename_from_source(filepath)
+                doc.page_content = f"【下文与({filename},{','.join(title_list)})有关】{doc.page_content}"
+            else:
+                doc.page_content = f"【下文与({','.join(title_list)})有关】{doc.page_content}"
         return docs
     else:
         print("文件不存在")
@@ -146,7 +150,7 @@ def my_md_split(filepath, sentence_size=SENTENCE_SIZE, sentence_overlap=SENTENCE
     docs = text_splitter.split_documents(md_header_splits)
 
     if MD_TITLE_ENHANCE:
-        docs = md_title_enhance(docs)
+        docs = md_title_enhance(docs, filepath)
     for doc in docs:
         doc.metadata["source"] = filepath
     return docs

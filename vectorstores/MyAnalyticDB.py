@@ -15,7 +15,7 @@ from langchain.vectorstores.base import VectorStore
 from configs.model_config import *
 from textsplitter.my_markdown_splitter import md_headers
 from utils.regular_util import match_brackets_at_start, remove_brackets_at_start
-
+from utils.file_util import get_filename_from_source
 try:
     from sqlalchemy.orm import declarative_base
 except ImportError:
@@ -253,13 +253,13 @@ class MyAnalyticDB(VectorStore):
             with self.engine.connect() as conn:
                 with conn.begin():
                     if isinstance(source, str):
-                        select_condition = self.__collection_table.c.source == self.get_filename_from_source(source)
+                        select_condition = self.__collection_table.c.source == get_filename_from_source(source)
                         # select_condition = self.collection_table.c.metadata.op("->>")("source") == source
                         s = select(self.__collection_table.c.id).where(select_condition)
                         result = conn.execute(s).fetchall()
                     else:
                         for src in source:
-                            select_condition = self.__collection_table.c.source == self.get_filename_from_source(src)
+                            select_condition = self.__collection_table.c.source == get_filename_from_source(src)
                             # select_condition = self.collection_table.c.metadata.op("->>")("source") == src
                             s = select(self.__collection_table.c.id).where(select_condition)
                             result.extend(conn.execute(s).fetchall())
@@ -294,11 +294,7 @@ class MyAnalyticDB(VectorStore):
                 results = conn.execute(s).fetchall()
         return list(result[0] for result in results)
 
-    def get_filename_from_source(self, file_source):
-        """
-        从文件路径名称中获取文件名
-        """
-        return os.path.split(file_source)[-1]
+
 
     def add_texts(
             self,
@@ -321,7 +317,7 @@ class MyAnalyticDB(VectorStore):
 
         # 导入的文件metadata必须要有source，才可以显示文件的filename和根据filename删除文件
         try:
-            filenames = [self.get_filename_from_source(metadata["source"]) for metadata in metadatas]
+            filenames = [get_filename_from_source(metadata["source"]) for metadata in metadatas]
         except KeyError:
             raise KeyError("导入的文本没有source，请检查load_file调用的textsplitter")
 
