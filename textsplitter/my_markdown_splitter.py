@@ -17,6 +17,22 @@ md_headers = [
 ]
 
 
+def _split_text_by_code_blocks(text, code_pattern):
+    # 找到所有代码块的位置
+    code_blocks = [match.span() for match in re.finditer(code_pattern, text, flags=re.DOTALL)]
+
+    # 对文本进行切分，根据代码块位置将文本分成块
+    text_lists = []
+    start_index = 0
+    for code_start, code_end in code_blocks:
+        text_lists.append(text[start_index:code_start])  # 代码块前的文本
+        text_lists.append(text[code_start:code_end])  # 代码块
+        start_index = code_end
+    if start_index < len(text):
+        text_lists.append(text[start_index:])  # 最后一个代码块后的文本
+    return text_lists
+
+
 def _split_text_with_regex(
         text: str, separator: str, keep_separator: bool
 ) -> List[str]:
@@ -39,12 +55,12 @@ class MyRecursiveCharacterTextSplitter(RecursiveCharacterTextSplitter):
     def __init__(
             self,
             separators: Optional[List[str]] = None,
-            keep_separator: bool = True,
+            keep_separator: bool = True,  # 需要在文本中保留切分符号，到时候方便拼接起来显示
             **kwargs: Any,
     ) -> None:
         """Create a new TextSplitter."""
         super().__init__(keep_separator=keep_separator, **kwargs)
-        self._separators = separators or ["\n\n", "\n", " ", ""]
+        self._separators = separators
 
     def _split_text(self, text: str, separators: List[str]) -> List[str]:
         """Split incoming text and return chunks."""
@@ -58,16 +74,20 @@ class MyRecursiveCharacterTextSplitter(RecursiveCharacterTextSplitter):
                 break
             if re.search(_s, text):
                 separator = _s
-                new_separators = separators[i + 1:]
+                new_separators = separators[i + 1:]  # 下几级的separators
                 break
-
-        splits = _split_text_with_regex(text, separator, self._keep_separator)
-
+        if separator == self._separators[1]:  # 有代码
+            splits = _split_text_by_code_blocks(text, self._separators[1])
+        else:
+            splits = _split_text_with_regex(text, separator, self._keep_separator)
+        # print(text)
+        # print(re.search(self._separators[1], text))
         # Now go merging things, recursively splitting longer texts.
         _good_splits = []
         _separator = "" if self._keep_separator else separator
+
         for s in splits:
-            if self._length_function(s) < self._chunk_size:
+            if self._length_function(s) < self._chunk_size or re.search(self._separators[1], s):  # 长度满足要求或是代码块，不递归切分
                 _good_splits.append(s)
             else:
                 if _good_splits:
@@ -77,7 +97,7 @@ class MyRecursiveCharacterTextSplitter(RecursiveCharacterTextSplitter):
                 if not new_separators:
                     final_chunks.append(s)
                 else:
-                    other_info = self._split_text(s, new_separators)
+                    other_info = self._split_text(s, new_separators)  # 切分完还是不够小，递归切分
                     final_chunks.extend(other_info)
         if _good_splits:
             merged_text = self._merge_splits(_good_splits, _separator)
@@ -97,8 +117,8 @@ class MyMarkdownTextSplitter(MyRecursiveCharacterTextSplitter):
             # Note the alternative syntax for headings (below) is not handled here
             # Heading level 2
             # ---------------
-            # End of code block
-            "```\n",
+            # Code block
+            r'```[^`]*?```\s*',  # .*?非贪心匹配，从```开始匹配到最近的```
             # Horizontal lines
             "\n\*\*\*+\n",
             "\n---+\n",

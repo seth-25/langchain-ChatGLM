@@ -72,7 +72,7 @@ class ChatGLMLLMChain(BaseAnswer, Chain, ABC):
         history = inputs[self.history_key]
         streaming = inputs[self.streaming_key]
         prompt = inputs[self.prompt_key]
-        print(f"模型参数: temperature {self.temperature}, top_p {self.top_p}, max_length{self.max_length}, history_len{self.history_len}")
+        print(f"模型参数: temperature {self.temperature}, top_p {self.top_p}, max_length {self.max_length}, history_len {self.history_len}")
         print(f"__call:{prompt}")
         # Create the StoppingCriteriaList with the stopping strings
         stopping_criteria_list = transformers.StoppingCriteriaList()

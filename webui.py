@@ -2,6 +2,7 @@ import gradio as gr
 import shutil
 
 import markdown
+import re
 
 from chains.local_doc_qa import LocalDocQA
 from configs.model_config import *
@@ -44,9 +45,9 @@ def parse_text(text):
             count += 1
             items = line.split('`')
             if count % 2 == 1:
-                lines[i] = f'<pre><code class="language-{items[-1]}">'
+                lines[i] = f'<code class="language-{items[-1]}"><pre>'
             else:
-                lines[i] = f'<br></code></pre>'
+                lines[i] = f'<br></pre></code>'
         else:
             if i > 0:
                 if count % 2 == 1:
@@ -63,6 +64,30 @@ def parse_text(text):
                     line = line.replace(")", "&#41;")
                     line = line.replace("$", "&#36;")
                 lines[i] = "<br>" + line
+    text = "".join(lines)
+    return text
+
+
+def parse_code(text):
+    """copy from https://github.com/GaiZhenbiao/ChuanhuChatGPT/"""
+    lines = text.split("\n")
+    lines = [line for line in lines if line != ""]
+    count = 0
+    for i, line in enumerate(lines):
+        if "```" in line:
+            count += 1
+            items = line.split('`')
+            if count % 2 == 1:
+                lines[i] = f'<code class="language-{items[-1]}"><pre>'
+            else:
+                lines[i] = f'<br></pre></code>'
+                count = 0
+        else:
+            if i > 0:
+                if count == 0:  # 非代码段用两个空格，便于markdown_to_html识别
+                    lines[i] = "\n\n" + line
+                else:
+                    lines[i] = "\n" + line
     text = "".join(lines)
     return text
 
@@ -110,14 +135,21 @@ def get_answer(query, keyword, knowledge_name, chatbot, history, mode, score_thr
             source = "\n\n"
             for i, doc in enumerate(resp["source_documents"]):
                 if "url" in doc.metadata.keys():
-                    source += f"""<details> <summary>【出处{i + 1}】：{os.path.split(doc.metadata["source"])[-1]} {doc.metadata["url"]} &nbsp;&nbsp;&nbsp; 【距离】：{doc.metadata['score']}</summary>"""
+                    source += f"""<details> <summary>【出处{i + 1}】：{os.path.split(doc.metadata["source"])[-1]} <a href="{doc.metadata["url"]}">链接</a> &nbsp;&nbsp;&nbsp; 【距离】：{doc.metadata['score']}</summary>"""
                 else:
                     source += f"""<details> <summary>【出处{i + 1}】：{os.path.split(doc.metadata["source"])[-1]} &nbsp;&nbsp;&nbsp; 【距离】：{doc.metadata['score']}</summary>"""
-                if os.path.split(doc.metadata["source"])[-1].lower().endswith(".md"):   # 是markdown
-                    doc_page_content = doc.metadata["content"].replace('\n', '\n\n')    # 要双回车markdown_to_html才能识别格式
+                if os.path.split(doc.metadata["source"])[-1].lower().endswith(".md"):  # 是markdown
+                    # doc_page_content = doc.metadata["content"].replace('\n', '\n\n')    # 要双回车markdown_to_html才能识别格式
+                    doc_page_content = parse_code(doc.metadata["content"])
                     source += f"""{markdown_to_html(doc_page_content)}"""
+                    print("================")
+                    print(doc.metadata["content"])
+                    print("-----------------")
+                    print(markdown_to_html(doc_page_content))
+                    print("``````````````````")
                 else:
-                    doc_page_content = doc.metadata["content"].replace('\n', '<br>')
+                    # doc_page_content = doc.metadata["content"].replace('\n', '<br>')
+                    doc_page_content = parse_text(doc.metadata["content"])
                     source += f"""{doc_page_content}"""
                 source += f"""</details>"""
 
