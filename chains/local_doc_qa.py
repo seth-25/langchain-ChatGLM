@@ -321,6 +321,11 @@ class LocalDocQA:
         vector_store = self.load_vector_store(knowledge_name)
         return vector_store.delete_collection()
 
+    def change_knowledge(self, knowledge_name, new_knowledge_name):
+        print(f"修改 {knowledge_name} 为 {new_knowledge_name}")
+        vector_store = self.load_vector_store(knowledge_name)
+        return vector_store.change_collection(new_knowledge_name)
+
 # if __name__ == "__main__":
 #     # 初始化消息
 #     args = None

@@ -116,6 +116,8 @@ class MyAnalyticDB(VectorStore):
 
     def check_collection_if_exists(self, collection_name) -> bool:
         """ Check if the collection in collections set """
+        if collection_name == LANGCHAIN_DEFAULT_COLLECTIONS_NAME:   # 表名不能和collections set相同
+            return True
         with self.engine.connect() as conn:
             with conn.begin():
                 collection_query = text(
@@ -209,6 +211,22 @@ class MyAnalyticDB(VectorStore):
             with conn.begin():
                 conn.execute(drop_statement)
                 conn.execute(delete_collection_record)
+
+    def change_collection(self, new_collection_name) -> None:
+        if self.__collection_table is None:
+            raise Exception("尚未绑定知识库")
+        alert_statement = text(f"ALTER TABLE {self.__collection_name} RENAME TO {new_collection_name};")
+        alert_index_statement = text(f"ALTER INDEX {self.__collection_name}_embedding_idx RENAME TO {new_collection_name}_embedding_idx;")
+        alert_id_seq_statement = text(f"ALTER TABLE {self.__collection_name}_id_seq RENAME TO {new_collection_name}_id_seq;")
+        update_collection_record = text(
+            f"UPDATE {LANGCHAIN_DEFAULT_COLLECTIONS_NAME} SET collection_name = '{new_collection_name}' WHERE collection_name = '{self.__collection_name}';")
+        with self.engine.connect() as conn:
+            with conn.begin():
+                conn.execute(alert_statement)
+                conn.execute(alert_index_statement)
+                conn.execute(alert_id_seq_statement)
+                conn.execute(update_collection_record)
+        self.set_collection_name(new_collection_name)
 
     def get_collections(self) -> List[str]:
         collections_query = text(

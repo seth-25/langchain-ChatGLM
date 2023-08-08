@@ -104,19 +104,6 @@ def validate_kb_name(knowledge_base_id: str) -> bool:
     return True
 
 
-async def create_knowledge(
-        knowledge_base_id: str = Form(..., description="Knowledge Base Name", example="kb1"),
-):
-    if not validate_kb_name(knowledge_base_id):
-        return BaseResponse(code=403, msg="Don't attack me", data=[])
-    table_is_exist = local_doc_qa.create_knowledge_vector_store(knowledge_base_id)
-
-    if table_is_exist:
-        return BaseResponse(code=200, msg="知识库已经存在")
-    else:
-        return BaseResponse(code=200, msg="创建知识库成功")
-
-
 async def upload_file(
         file: UploadFile = File(description="A single binary file"),
         knowledge_base_id: str = Form(..., description="Knowledge Base Name", example="kb1"),
@@ -208,6 +195,39 @@ async def list_docs(
 
     all_doc_names = local_doc_qa.list_file_from_vector_store(knowledge_base_id)
     return ListDocsResponse(data=all_doc_names)
+
+
+async def create_kb(
+        knowledge_base_id: str = Form(..., description="Knowledge Base Name", example="kb1"),
+):
+    if not validate_kb_name(knowledge_base_id):
+        return BaseResponse(code=403, msg="Don't attack me", data=[])
+    table_is_exist = local_doc_qa.create_knowledge_vector_store(knowledge_base_id)
+
+    if table_is_exist:
+        return BaseResponse(code=200, msg="知识库已经存在")
+    else:
+        return BaseResponse(code=200, msg="创建知识库成功")
+
+
+async def change_kb(
+        knowledge_base_id: str = Form(...,
+                                      description="Knowledge Base Name",
+                                      example="kb1"),
+        new_knowledge_base_id: str = Form(...,
+                                          description="Knowledge Base Name",
+                                          example="kb2"),
+):
+    if not validate_kb_name(knowledge_base_id) or not validate_kb_name(new_knowledge_base_id):
+        return BaseResponse(code=403, msg="Don't attack me")
+
+    if not local_doc_qa.check_knowledge_in_collections(knowledge_base_id):
+        return BaseResponse(code=404, msg=f"知识库 {knowledge_base_id} 不存在")
+    if local_doc_qa.check_knowledge_in_collections(new_knowledge_base_id):
+        return BaseResponse(code=404, msg=f"知识库 {new_knowledge_base_id} 已经存在")
+
+    local_doc_qa.change_knowledge(knowledge_base_id, new_knowledge_base_id)
+    return BaseResponse(code=200, msg=f"知识库 {knowledge_base_id} 成功修改为 {new_knowledge_base_id}")
 
 
 async def delete_kb(
@@ -594,10 +614,12 @@ def api_start(host, port, **kwargs):
 
     app.post("/chat", response_model=ChatMessage, summary="与模型对话")(chat)
 
-    app.post("/local_doc_qa/create_knowledge_base", response_model=BaseResponse, summary="创建知识库")(create_knowledge)
+    app.post("/local_doc_qa/create_knowledge_base", response_model=BaseResponse, summary="创建知识库")(create_kb)
+    app.post("/local_doc_qa/change_knowledge_base", response_model=BaseResponse, summary="修改知识库名称")(change_kb)
     app.post("/local_doc_qa/upload_file", response_model=BaseResponse, summary="上传文件到知识库")(upload_file)
     app.post("/local_doc_qa/upload_files", response_model=BaseResponse, summary="批量上传文件到知识库")(upload_files)
-    app.post("/local_doc_qa/local_doc_chat", response_model=ChatMessage, summary="与知识库对话，根据问题搜索知识")(local_doc_chat)
+    app.post("/local_doc_qa/local_doc_chat", response_model=ChatMessage, summary="与知识库对话，根据问题搜索知识")(
+        local_doc_chat)
     app.post("/local_doc_qa/local_doc_chat_with_keyword", response_model=ChatMessage,
              summary="与知识库对话，根据关键词搜索知识")(local_doc_chat_with_keyword)
     app.post("/local_doc_qa/bing_search_chat", response_model=ChatMessage, summary="与必应搜索对话")(bing_search_chat)
