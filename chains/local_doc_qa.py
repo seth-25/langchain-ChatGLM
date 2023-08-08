@@ -37,7 +37,6 @@ def load_file(filepath, sentence_size=SENTENCE_SIZE, using_zh_title_enhance=ZH_T
         # loader = UnstructuredFileLoader(filepath, mode="elements")
         # docs = loader.load()
         docs = my_md_split(filepath, sentence_size=sentence_size)
-
     elif filepath.lower().endswith(".txt"):
         loader = TextLoader(filepath, autodetect_encoding=True)
         textsplitter = ChineseTextSplitter(pdf=False, sentence_size=sentence_size)
@@ -46,8 +45,10 @@ def load_file(filepath, sentence_size=SENTENCE_SIZE, using_zh_title_enhance=ZH_T
         # 暂且将paddle相关的loader改为动态加载，可以在不上传pdf/image知识文件的前提下使用protobuf=4.x
         from loader import UnstructuredPaddlePDFLoader
         loader = UnstructuredPaddlePDFLoader(filepath)
+        print("pdf加载完成")
         textsplitter = ChineseTextSplitter(pdf=True, sentence_size=sentence_size)
         docs = loader.load_and_split(textsplitter)
+        print("切分完成")
     elif filepath.lower().endswith(".jpg") or filepath.lower().endswith(".png"):
         # 暂且将paddle相关的loader改为动态加载，可以在不上传pdf/image知识文件的前提下使用protobuf=4.x
         from loader import UnstructuredPaddleImageLoader

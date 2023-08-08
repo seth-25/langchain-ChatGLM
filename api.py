@@ -205,9 +205,9 @@ async def create_kb(
     table_is_exist = local_doc_qa.create_knowledge_vector_store(knowledge_base_id)
 
     if table_is_exist:
-        return BaseResponse(code=200, msg="知识库已经存在")
+        return BaseResponse(code=200, msg=f"知识库 {knowledge_base_id} 已经存在")
     else:
-        return BaseResponse(code=200, msg="创建知识库成功")
+        return BaseResponse(code=200, msg=f"创建知识库 {knowledge_base_id} 成功")
 
 
 async def change_kb(
@@ -224,7 +224,7 @@ async def change_kb(
     if not local_doc_qa.check_knowledge_in_collections(knowledge_base_id):
         return BaseResponse(code=404, msg=f"知识库 {knowledge_base_id} 不存在")
     if local_doc_qa.check_knowledge_in_collections(new_knowledge_base_id):
-        return BaseResponse(code=404, msg=f"知识库 {new_knowledge_base_id} 已经存在")
+        return BaseResponse(code=500, msg=f"知识库 {new_knowledge_base_id} 已经存在")
 
     local_doc_qa.change_knowledge(knowledge_base_id, new_knowledge_base_id)
     return BaseResponse(code=200, msg=f"知识库 {knowledge_base_id} 成功修改为 {new_knowledge_base_id}")
