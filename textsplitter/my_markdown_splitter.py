@@ -2,7 +2,7 @@ import re
 from langchain.document_loaders import TextLoader
 from langchain.text_splitter import MarkdownHeaderTextSplitter, RecursiveCharacterTextSplitter
 from langchain.docstore.document import Document
-from typing import List, Any, Optional
+from typing import List, Any, Optional, Iterable
 
 from configs.model_config import *
 from utils.file_util import get_filename_from_source
@@ -79,9 +79,13 @@ class MyRecursiveCharacterTextSplitter(RecursiveCharacterTextSplitter):
         if separator == self._separators[1]:  # 有代码
             splits = _split_text_by_code_blocks(text, self._separators[1])
         else:
+            text = re.sub(r" {3,}", r" ", text)  # 超过2个的空格替换成一个（表格经常包含大量空格）
+            text = re.sub(r"-{4,}", r"---", text)  # 超过3个的-替换成一个（表格经常包含大量-）
             splits = _split_text_with_regex(text, separator, self._keep_separator)
         # print(text)
-        # print(re.search(self._separators[1], text))
+        # print("separator:", [separator])
+        # print(splits)
+        # print("==================")
         # Now go merging things, recursively splitting longer texts.
         _good_splits = []
         _separator = "" if self._keep_separator else separator

@@ -13,7 +13,7 @@ from agent import bing_search
 from langchain.docstore.document import Document
 from textsplitter.zh_title_enhance import zh_title_enhance
 from langchain.chains.base import Chain
-
+from urllib.parse import quote_plus
 
 # patch HuggingFaceEmbeddings to make it hashable
 def _embeddings_hash(self):
@@ -28,7 +28,7 @@ CONNECTION_STRING = MyAnalyticDB.connection_string_from_db_params(
     port=int(os.environ.get("PG_PORT", "5432")),
     database=os.environ.get("PG_DATABASE", "postgres"),
     user=os.environ.get("PG_USER", "postgres"),
-    password=os.environ.get("PG_PASSWORD", "postgres"),
+    password=quote_plus(os.environ.get("PG_PASSWORD", "postgres")),
 )
 
 
@@ -45,10 +45,10 @@ def load_file(filepath, sentence_size=SENTENCE_SIZE, using_zh_title_enhance=ZH_T
         # 暂且将paddle相关的loader改为动态加载，可以在不上传pdf/image知识文件的前提下使用protobuf=4.x
         from loader import UnstructuredPaddlePDFLoader
         loader = UnstructuredPaddlePDFLoader(filepath)
-        print("pdf加载完成")
+        # print("pdf加载完成")
         textsplitter = ChineseTextSplitter(pdf=True, sentence_size=sentence_size)
         docs = loader.load_and_split(textsplitter)
-        print("切分完成")
+        # print("切分完成")
     elif filepath.lower().endswith(".jpg") or filepath.lower().endswith(".png"):
         # 暂且将paddle相关的loader改为动态加载，可以在不上传pdf/image知识文件的前提下使用protobuf=4.x
         from loader import UnstructuredPaddleImageLoader

@@ -72,28 +72,28 @@ def parse_code(text):
     """copy from https://github.com/GaiZhenbiao/ChuanhuChatGPT/"""
     lines = text.split("\n")
     lines = [line for line in lines if line != ""]
-    count = 0
+    count_code = 0
     for i, line in enumerate(lines):
         if "```" in line:
-            count += 1
+            count_code += 1
             items = line.split('`')
-            if count % 2 == 1:
+            if count_code % 2 == 1:
                 lines[i] = f'<code class="language-{items[-1]}"><pre>'
             else:
                 lines[i] = f'<br></pre></code>'
-                count = 0
+                count_code = 0
         else:
             if i > 0:
-                if count == 0:  # 非代码段用两个空格，便于markdown_to_html识别
-                    lines[i] = "\n\n" + line
+                if count_code == 0 and not lines[i - 1].endswith("|"):
+                    lines[i] = "\n\n" + line      # 非代码段用两个回车，便于markdown_to_html识别
                 else:
-                    lines[i] = "\n" + line
+                    lines[i] = "\n" + line  # 表格和代码只用1个回车
     text = "".join(lines)
     return text
 
 
 def markdown_to_html(md_text):
-    return markdown.markdown(md_text)
+    return markdown.markdown(md_text, extensions=['tables'])
 
 
 def get_answer(query, keyword, knowledge_name, chatbot, history, mode, score_threshold=VECTOR_SEARCH_SCORE_THRESHOLD,
@@ -139,14 +139,13 @@ def get_answer(query, keyword, knowledge_name, chatbot, history, mode, score_thr
                 else:
                     source += f"""<details> <summary>【出处{i + 1}】：{os.path.split(doc.metadata["source"])[-1]} &nbsp;&nbsp;&nbsp; 【距离】：{doc.metadata['score']}</summary>"""
                 if os.path.split(doc.metadata["source"])[-1].lower().endswith(".md"):  # 是markdown
-                    # doc_page_content = doc.metadata["content"].replace('\n', '\n\n')    # 要双回车markdown_to_html才能识别格式
                     doc_page_content = parse_code(doc.metadata["content"])
                     source += f"""{markdown_to_html(doc_page_content)}"""
-                    print("================")
-                    print(doc.metadata["content"])
-                    print("-----------------")
-                    print(markdown_to_html(doc_page_content))
-                    print("``````````````````")
+                    # print("================")
+                    # print(doc_page_content)
+                    # print("-----------------")
+                    # print(markdown_to_html(doc_page_content))
+                    # print("``````````````````")
                 else:
                     # doc_page_content = doc.metadata["content"].replace('\n', '<br>')
                     doc_page_content = parse_text(doc.metadata["content"])
