@@ -644,11 +644,11 @@ class MyAnalyticDB(VectorStore):
                     result = id_map[id]
                     result_page_content = result.document
                     last_res = id_map[id - 1]  # 上一个文本
-                    # 开启标题增强的情况下，如果当前文本和上一个文本标题相同，去掉当前文本的标题。因为有时候大模型会把标题也混入答案中。
+                    # 开启标题增强的情况下，如果当前文本和上一个文本标题相同，去掉当前文本的标题。
                     if match_brackets_at_start(last_res.document) == match_brackets_at_start(result.document):
                         result_page_content = remove_brackets_at_start(result.document)
 
-                    if REMOVE_TITLE:
+                    if REMOVE_TITLE:    # 有时候大模型会把标题也混入答案中。可选择去掉标题，但查询可能不全
                         doc.page_content += "\n" + result_page_content
                     else:
                         doc.page_content += "\n" + result.document

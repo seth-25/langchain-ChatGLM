@@ -14,3 +14,9 @@ def remove_brackets_at_start(text):
     pattern = r'^【.*?】'
     result = re.sub(pattern, '', text, count=1)  # 移除匹配的部分
     return result
+
+
+def add_enter_after_brackets(text):
+    pattern = r'^【.*?】'
+    replacement = r'\g<0>\n'
+    return re.sub(pattern, replacement, text, flags=re.MULTILINE)
