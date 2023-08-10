@@ -57,7 +57,7 @@ def load_file(filepath, sentence_size=SENTENCE_SIZE, using_zh_title_enhance=ZH_T
         textsplitter = ChineseTextSplitter(pdf=False, sentence_size=sentence_size)
         docs = loader.load_and_split(text_splitter=textsplitter)
     elif filepath.lower().endswith(".csv"):
-        loader = CSVLoader(filepath, encoding='gb2312')
+        loader = CSVLoader(filepath, encoding='gb18030')
         docs = loader.load()
     else:
         loader = UnstructuredFileLoader(filepath, mode="elements")
