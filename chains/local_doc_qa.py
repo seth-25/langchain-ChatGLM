@@ -15,6 +15,7 @@ from textsplitter.zh_title_enhance import zh_title_enhance
 from langchain.chains.base import Chain
 from urllib.parse import quote_plus
 
+
 # patch HuggingFaceEmbeddings to make it hashable
 def _embeddings_hash(self):
     return hash(self.model_name)
@@ -56,7 +57,7 @@ def load_file(filepath, sentence_size=SENTENCE_SIZE, using_zh_title_enhance=ZH_T
         textsplitter = ChineseTextSplitter(pdf=False, sentence_size=sentence_size)
         docs = loader.load_and_split(text_splitter=textsplitter)
     elif filepath.lower().endswith(".csv"):
-        loader = CSVLoader(filepath)
+        loader = CSVLoader(filepath, encoding='gb2312')
         docs = loader.load()
     else:
         loader = UnstructuredFileLoader(filepath, mode="elements")
@@ -171,7 +172,7 @@ class LocalDocQA:
         else:
             logger.info("文件均未成功加载，请检查依赖包或替换为其他文件再次上传。")
 
-            return None, loaded_files
+            return None, []
 
     def one_knowledge_add(self, knowledge_name, one_title, one_content, one_content_segmentation, sentence_size):
         try:
