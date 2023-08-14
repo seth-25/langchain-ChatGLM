@@ -16,6 +16,7 @@ from configs.model_config import *
 from textsplitter.my_markdown_splitter import md_headers
 from utils.regular_util import match_brackets_at_start, remove_brackets_at_start
 from utils.file_util import get_filename_from_source
+
 try:
     from sqlalchemy.orm import declarative_base
 except ImportError:
@@ -116,7 +117,7 @@ class MyAnalyticDB(VectorStore):
 
     def check_collection_if_exists(self, collection_name) -> bool:
         """ Check if the collection in collections set """
-        if collection_name == LANGCHAIN_DEFAULT_COLLECTIONS_NAME:   # 表名不能和collections set相同
+        if collection_name == LANGCHAIN_DEFAULT_COLLECTIONS_NAME:  # 表名不能和collections set相同
             return True
         with self.engine.connect() as conn:
             with conn.begin():
@@ -173,8 +174,8 @@ class MyAnalyticDB(VectorStore):
                 if not result:
                     index_statement = text(
                         f"""
-                         CREATE INDEX {index_name}
-                         ON {collection_name} USING ann(embedding)
+                         CREATE INDEX "{index_name}"
+                         ON "{collection_name}" USING ann(embedding)
                          WITH (
                              "dim" = {self.embedding_dimension},
                              "hnsw_m" = 100
@@ -203,7 +204,7 @@ class MyAnalyticDB(VectorStore):
         if self.__collection_table is None:
             raise Exception("尚未绑定知识库")
         self.logger.debug("Trying to delete knowledge")
-        drop_statement = text(f"DROP TABLE IF EXISTS {self.__collection_name};")
+        drop_statement = text(f"""DROP TABLE IF EXISTS "{self.__collection_name}";""")
         self.__base.metadata.remove(self.__collection_table)
         delete_collection_record = text(
             f"DELETE FROM {LANGCHAIN_DEFAULT_COLLECTIONS_NAME} WHERE collection_name = '{self.__collection_name}';")
@@ -215,11 +216,13 @@ class MyAnalyticDB(VectorStore):
     def change_collection(self, new_collection_name) -> None:
         if self.__collection_table is None:
             raise Exception("尚未绑定知识库")
-        alert_statement = text(f"ALTER TABLE {self.__collection_name} RENAME TO {new_collection_name};")
-        alert_index_statement = text(f"ALTER INDEX {self.__collection_name}_embedding_idx RENAME TO {new_collection_name}_embedding_idx;")
-        alert_id_seq_statement = text(f"ALTER TABLE {self.__collection_name}_id_seq RENAME TO {new_collection_name}_id_seq;")
+        alert_statement = text(f"""ALTER TABLE "{self.__collection_name}" RENAME TO "{new_collection_name}";""")
+        alert_index_statement = text(
+            f"""ALTER INDEX "{self.__collection_name}_embedding_idx" RENAME TO "{new_collection_name}_embedding_idx";""")
+        alert_id_seq_statement = text(
+            f"""ALTER TABLE "{self.__collection_name}_id_seq" RENAME TO "{new_collection_name}_id_seq";""")
         update_collection_record = text(
-            f"UPDATE {LANGCHAIN_DEFAULT_COLLECTIONS_NAME} SET collection_name = '{new_collection_name}' WHERE collection_name = '{self.__collection_name}';")
+            f"""UPDATE {LANGCHAIN_DEFAULT_COLLECTIONS_NAME} SET collection_name = '{new_collection_name}' WHERE collection_name = '{self.__collection_name}';""")
         with self.engine.connect() as conn:
             with conn.begin():
                 conn.execute(alert_statement)
@@ -311,8 +314,6 @@ class MyAnalyticDB(VectorStore):
                 s = select(self.__collection_table.c.source).group_by(self.__collection_table.c.source)
                 results = conn.execute(s).fetchall()
         return list(result[0] for result in results)
-
-
 
     def add_texts(
             self,
@@ -652,7 +653,7 @@ class MyAnalyticDB(VectorStore):
                         doc.page_content += "\n" + result_page_content
                     else:
                         doc.page_content += "\n" + result.document
-                    doc.metadata["content"] += "\n" + result_page_content   # 去除标题，方便在webui显示
+                    doc.metadata["content"] += "\n" + result_page_content  # 去除标题，方便在webui显示
                     doc_score = min(doc_score, result.distance)
             if not isinstance(doc, Document) or doc_score is None:
                 raise ValueError(f"Could not find document, got {doc}")
