@@ -107,7 +107,7 @@ def get_answer(query, keyword, knowledge_name, chatbot, history, mode, score_thr
     print("history")
     for h in history:
         print(h)
-    print("keyword", keyword, type(keyword))
+    print("keyword", keyword)
 
     local_doc_qa.chunk_content = chunk_content
     local_doc_qa.chunk_size = chunk_size

@@ -16,20 +16,26 @@ LANGCHAIN_DEFAULT_COLLECTIONS_NAME = "langchain_collections"
 # 在以下字典中修改属性值，以指定本地embedding模型存储位置
 # 如将 "text2vec": "GanymedeNil/text2vec-large-chinese" 修改为 "text2vec": "User/Downloads/text2vec-large-chinese"
 # 此处请写绝对路径
+
 embedding_model_dict = {
     "ernie-tiny": "nghuyong/ernie-3.0-nano-zh",
     "ernie-base": "nghuyong/ernie-3.0-base-zh",
     "text2vec-base": "shibing624/text2vec-base-chinese",
     "text2vec": "GanymedeNil/text2vec-large-chinese",
-    "text2vec-base-multilingual": "shibing624/text2vec-base-multilingual",
-    "text2vec-base-chinese-sentence": "shibing624/text2vec-base-chinese-sentence",
-    "text2vec-base-chinese-paraphrase": "shibing624/text2vec-base-chinese-paraphrase",
+    "text2vec-paraphrase": "shibing624/text2vec-base-chinese-paraphrase",
+    "text2vec-sentence": "shibing624/text2vec-base-chinese-sentence",
+    "text2vec-multilingual": "shibing624/text2vec-base-multilingual",
     "m3e-small": "moka-ai/m3e-small",
     "m3e-base": "moka-ai/m3e-base",
+    "m3e-large": "moka-ai/m3e-large",
+    "bge-small-zh": "BAAI/bge-small-zh",
+    "bge-base-zh": "BAAI/bge-base-zh",
+    "bge-large-zh": "BAAI/bge-large-zh"
 }
 
 # Embedding model name
-EMBEDDING_MODEL = "text2vec"
+EMBEDDING_MODEL = "text2vec"    # dim=1024
+# EMBEDDING_MODEL = "m3e-base"  # dim=768
 
 # Embedding running device
 EMBEDDING_DEVICE = "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
@@ -232,7 +238,6 @@ llm_model_dict = {
 }
 
 # LLM 名称
-# LLM_MODEL = "chatglm2-6b"
 LLM_MODEL = "chatglm2-6b-32k"
 # LLM_MODEL = "chatglm2-6b-int4"
 
@@ -240,11 +245,11 @@ LLM_MODEL = "chatglm2-6b-32k"
 MAX_LENGTH = 20480
 
 # LLM回答多样性，越低越精确相关，越高越发散
-TEMPERATURE = 0.01
-TOP_P = 0.2
+TEMPERATURE = 0.05
+TOP_P = 0.3
 
 # 传入LLM的历史记录长度/对话长度
-HISTORY_LEN = 3
+HISTORY_LEN = 0
 
 # 量化加载8bit 模型
 LOAD_IN_8BIT = False
@@ -271,10 +276,16 @@ LLM_DEVICE = "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mp
 KB_ROOT_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "knowledge_base")
 
 # 基于上下文的prompt模版，请务必保留"{question}"和"{context}"
-PROMPT_TEMPLATE = """已知信息：
-{context}
+# PROMPT_TEMPLATE = """已知信息：
+# {context}
+#
+# 根据已知信息，详细和准确地来回答用户的问题。如果已知信息不足以回答问题，请回答“根据已知信息无法回答该问题”。不允许在答案中添加编造成分，不要让【】内的内容出现在答案里，答案请使用中文。 问题是：{question}"""
 
-根据上述已知信息，简洁和专业的来回答用户的问题。如果无法从中得到答案，请说 “根据已知信息无法回答该问题” 或 “没有提供足够的相关信息”，不允许在答案中添加编造成分，不要让【】内的内容出现在答案里，答案请使用中文。 问题是：{question}"""
+PROMPT_TEMPLATE = """【已知信息】{context} 
+
+【问题】{question}
+
+【指令】根据已知信息，详细和准确的来回答问题。如果无法从中得到答案，请说 “根据已知信息无法回答该问题”，不允许在答案中添加编造成分，答案请使用中文。"""
 
 # PROMPT_TEMPLATE = """
 # 根据已知信息，简洁和专业的来回答用户的问题。不允许在答案中添加编造成分，不要让【】内的内容出现在答案里，答案请使用中文。
@@ -330,7 +341,7 @@ SENTENCE_OVERLAP = 0
 CHUNK_SIZE = 1000
 
 # 知识库检索时返回的匹配内容条数
-VECTOR_SEARCH_TOP_K = 5
+VECTOR_SEARCH_TOP_K = 3
 
 # 知识检索内容距离 Score, 数值范围约为0-1100，如果为0，则不生效，建议设置为500左右，经测试设置为小于500时，匹配结果更精准
 VECTOR_SEARCH_SCORE_THRESHOLD = 0
