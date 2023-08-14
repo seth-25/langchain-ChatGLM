@@ -166,15 +166,22 @@ def my_md_split(filepath, sentence_size=SENTENCE_SIZE, sentence_overlap=SENTENCE
     loader = TextLoader(filepath)
     markdown_document: Document = loader.load()[0]
 
-    # 按标题拆分，并将标题写入metadata
-    header_splitter = MarkdownHeaderTextSplitter(headers_to_split_on=md_headers, return_each_line=False)
-    md_header_splits = header_splitter.split_text(markdown_document.page_content)
-
-    text_splitter = MyMarkdownTextSplitter(chunk_size=sentence_size, chunk_overlap=sentence_overlap)
-    docs = text_splitter.split_documents(md_header_splits)
-
+    # 每段文本前加如标题
     if MD_TITLE_ENHANCE:
+        # 按标题拆分，并将标题写入metadata
+        header_splitter = MarkdownHeaderTextSplitter(headers_to_split_on=md_headers, return_each_line=False)
+        md_header_splits = header_splitter.split_text(markdown_document.page_content)
+
+        # 按separators递归拆分
+        text_splitter = MyMarkdownTextSplitter(chunk_size=sentence_size, chunk_overlap=sentence_overlap)
+        docs = text_splitter.split_documents(md_header_splits)
+
         docs = md_title_enhance(docs, filepath)
+    else:
+        # 按separators递归拆分
+        text_splitter = MyMarkdownTextSplitter(chunk_size=sentence_size, chunk_overlap=sentence_overlap)
+        docs = text_splitter.split_documents([markdown_document])
+
     for doc in docs:
         doc.metadata["source"] = filepath
     return docs
