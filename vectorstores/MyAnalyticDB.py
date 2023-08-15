@@ -115,30 +115,23 @@ class MyAnalyticDB(VectorStore):
         with self.engine.connect() as conn:
             with conn.begin():
                 # Create the table
-                self.__base.metadata.create_all(conn)
-                # collections_table.create(conn, checkfirst=True)
+                collections_table.create(conn, checkfirst=True)
         return collections_table
 
-    def check_collection_if_exists(self, collection_name) -> bool:
+    def check_collection_if_exists(self, collection_name: str) -> bool:
         """ Check if the collection in collections set """
         if collection_name == LANGCHAIN_DEFAULT_COLLECTIONS_NAME:  # 表名不能和collections set相同
             return True
         with self.engine.connect() as conn:
             with conn.begin():
-                collection_query = text(
-                    f"""
-                        SELECT 1
-                        FROM {LANGCHAIN_DEFAULT_COLLECTIONS_NAME}
-                        WHERE collection_name = '{collection_name}';
-                    """
-                )
+                collection_query = select(1).where(self.__collections_set.c.collection_name == collection_name)
                 collection_result = conn.execute(collection_query).scalar()
         if collection_result:
             return True
         else:
             return False
 
-    def create_table_if_not_exists(self, collection_name=None) -> [Table, bool]:
+    def create_table_if_not_exists(self, collection_name: str = None) -> [Table, bool]:
         """ 返回创建的Table对象和bool类型的table_is_exist，table_is_exist用于判断创建的表是否存在 """
         if collection_name is None:
             collection_name = self.__collection_name
@@ -160,8 +153,17 @@ class MyAnalyticDB(VectorStore):
         table_is_exist = True
         with self.engine.connect() as conn:
             with conn.begin():
-                # Create the table
-                self.__base.metadata.create_all(conn)
+                if not self.check_collection_if_exists(collection_name):
+                    # Create the table
+                    collection_table.create(conn, checkfirst=True)
+
+                    # Add the collection in collections set if it doesn't exist
+                    table_is_exist = False
+                    insert_collection = self.__collections_set.insert().values(collection_name=collection_name,
+                                                                               prompt=PROMPT_TEMPLATE,
+                                                                               embedding_model=EMBEDDING_MODEL,
+                                                                               dim=LANGCHAIN_DEFAULT_EMBEDDING_DIM)
+                    conn.execute(insert_collection)
 
                 # Check if the index exists
                 index_name = f"{collection_name}_embedding_idx"
@@ -188,37 +190,21 @@ class MyAnalyticDB(VectorStore):
                     )
                     conn.execute(index_statement)
 
-                # Check if the collection in collections set
-                collection_query = text(
-                    f"""
-                       SELECT 1
-                       FROM {LANGCHAIN_DEFAULT_COLLECTIONS_NAME}
-                       WHERE collection_name = '{collection_name}';
-                   """
-                )
-                collection_result = conn.execute(collection_query).scalar()
-                # Add the collection in collections set if it doesn't exist
-                if not collection_result:
-                    table_is_exist = False
-                    ins = self.__collections_set.insert().values(collection_name=collection_name,
-                                                                 prompt=PROMPT_TEMPLATE,
-                                                                 embedding_model=EMBEDDING_MODEL,
-                                                                 dim=LANGCHAIN_DEFAULT_EMBEDDING_DIM)
-                    conn.execute(ins)
         return collection_table, table_is_exist
 
     def delete_collection(self) -> None:
         if self.__collection_table is None or self.__collections_set is None:
             raise Exception("尚未绑定知识库")
         self.logger.debug("Trying to delete knowledge")
-        drop_statement = text(f"""DROP TABLE IF EXISTS "{self.__collection_name}";""")
-        self.__base.metadata.remove(self.__collection_table)
-        delete_collection_record = text(
-            f"DELETE FROM {LANGCHAIN_DEFAULT_COLLECTIONS_NAME} WHERE collection_name = '{self.__collection_name}';")
+
+        delete_collection_record = self.__collections_set.delete().where(
+            self.__collections_set.c.collection_name == self.__collection_name)
         with self.engine.connect() as conn:
             with conn.begin():
-                conn.execute(drop_statement)
+                self.__collection_table.drop(conn, checkfirst=True)
+                self.__base.metadata.remove(self.__collection_table)
                 conn.execute(delete_collection_record)
+                self.__collection_name = None
 
     def change_collection(self, new_collection_name) -> None:
         if self.__collection_table is None or self.__collections_set is None:
@@ -238,21 +224,21 @@ class MyAnalyticDB(VectorStore):
                 conn.execute(alert_index_statement)
                 conn.execute(alert_id_seq_statement)
                 conn.execute(update_collection_record)
-        self.set_collection_name(new_collection_name)
 
-    def get_collections(self) -> List[str]:
-        collections_query = text(
-            f"SELECT collection_name FROM {LANGCHAIN_DEFAULT_COLLECTIONS_NAME};")
-        with self.engine.connect() as conn:
-            with conn.begin():
-                result = conn.execute(collections_query)
-                return [record.collection_name for record in result.all()]
+        self.set_collection_name(new_collection_name)
 
     def set_collection_name(self, collection_name):
         if self.__collection_table is not None:
             self.__base.metadata.remove(self.__collection_table)
         self.__collection_name = collection_name
         self.__collection_table, table_is_exist = self.create_table_if_not_exists()
+
+    def get_collections(self) -> List[str]:
+        collections_query = select(self.__collections_set.c.collection_name)
+        with self.engine.connect() as conn:
+            with conn.begin():
+                result = conn.execute(collections_query).fetchall()
+                return [record.collection_name for record in result]
 
     def change_prompt(self, collection_name, prompt) -> None:
         update_collection_prompt = self.__collections_set.update().where(
@@ -266,9 +252,10 @@ class MyAnalyticDB(VectorStore):
             self.__collections_set.c.collection_name == collection_name)
         with self.engine.connect() as conn:
             with conn.begin():
-               result = conn.execute(select_collection_prompt).first()
-        return result.prompt
-
+                result = conn.execute(select_collection_prompt).scalar()
+        if result is None:
+            raise Exception(f"{LANGCHAIN_DEFAULT_COLLECTIONS_NAME}表内数据错误，不存在{collection_name}")
+        return result
 
     def delete(self, ids: Optional[List[str]] = None, **kwargs: Any) -> Optional[bool]:
         """Delete by vector IDs.
@@ -294,7 +281,7 @@ class MyAnalyticDB(VectorStore):
         if self.__collection_table is None:
             raise Exception("尚未绑定知识库")
         try:
-            result = []
+            results = []
             # 查出文件路径等于给定的source的记录的id
             with self.engine.connect() as conn:
                 with conn.begin():
@@ -302,24 +289,25 @@ class MyAnalyticDB(VectorStore):
                         select_condition = self.__collection_table.c.source == get_filename_from_source(source)
                         # select_condition = self.collection_table.c.metadata.op("->>")("source") == source
                         s = select(self.__collection_table.c.id).where(select_condition)
-                        result = conn.execute(s).fetchall()
+                        results = conn.execute(s).fetchall()
                     else:
                         for src in source:
                             select_condition = self.__collection_table.c.source == get_filename_from_source(src)
                             # select_condition = self.collection_table.c.metadata.op("->>")("source") == src
                             s = select(self.__collection_table.c.id).where(select_condition)
-                            result.extend(conn.execute(s).fetchall())
+                            results.extend(conn.execute(s).fetchall())
 
-            ids = [i[0] for i in result]
+            ids = [result.id for result in results]
             if len(ids) == 0:
                 return f"docs delete fail"
             else:
-                self.delete(ids)
+                if self.delete(ids):
+                    return f"docs delete success"
+                else:
+                    return f"docs delete fail"
 
-                # self.save_local(vs_path)
-                return f"docs delete success"
         except Exception as e:
-            print(e)
+            print("Delete Doc operation failed:", str(e))
             return f"docs delete fail"
 
     def update_doc(self, source, new_docs):
@@ -512,8 +500,8 @@ class MyAnalyticDB(VectorStore):
 
         with self.engine.connect() as conn:
             with conn.begin():
-                max_id = conn.execute(select(func.max(self.__collection_table.c.id))).first()[0]  # 获得id最大最小值，以确定区间范围
-                min_id = conn.execute(select(func.min(self.__collection_table.c.id))).first()[0]
+                max_id = conn.execute(select(func.max(self.__collection_table.c.id))).scalar()  # 获得id最大最小值，以确定区间范围
+                min_id = conn.execute(select(func.min(self.__collection_table.c.id))).scalar()
         if max_id is None:
             max_id = 0
         if min_id is None:
