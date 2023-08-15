@@ -137,13 +137,9 @@ class LocalDocQA:
                                          pre_delete_collection=False)
 
     def load_vector_store(self, knowledge_name):
-        self.myAnalyticDB.set_collection_name(knowledge_name)
+        if self.myAnalyticDB.get_collection_name() != knowledge_name:
+            self.myAnalyticDB.set_collection_name(knowledge_name)
         return self.myAnalyticDB
-
-    def create_knowledge_vector_store(self, knowledge_name: str or os.PathLike = None):
-        print(f"创建 {knowledge_name}")
-        _, table_is_exist = self.myAnalyticDB.create_table_if_not_exists(knowledge_name)
-        return table_is_exist
 
     # 上传文件并创建知识库
     def init_knowledge_vector_store(self,
@@ -307,6 +303,23 @@ class LocalDocQA:
         docs = vector_store.list_docs()
         return docs
 
+    def change_knowledge(self, knowledge_name, new_knowledge_name):
+        print(f"修改 {knowledge_name} 为 {new_knowledge_name}")
+        vector_store = self.load_vector_store(knowledge_name)
+        return vector_store.change_collection(new_knowledge_name)
+
+    def delete_knowledge(self, knowledge_name):
+        print(f"删除 {knowledge_name}")
+        vector_store = self.load_vector_store(knowledge_name)
+        return vector_store.delete_collection()
+
+    ####################################################################################################
+    # 下面是不需要设定collection_name，直接在langchain_collections表上进行的操作
+    def create_knowledge_vector_store(self, knowledge_name: str or os.PathLike = None):
+        print(f"创建 {knowledge_name}")
+        _, table_is_exist = self.myAnalyticDB.create_table_if_not_exists(knowledge_name)
+        return table_is_exist
+
     def check_knowledge_in_collections(self, knowledge_name):
         print(f"检查 {knowledge_name} 是否存在")
         if not knowledge_name:
@@ -318,50 +331,9 @@ class LocalDocQA:
         print("获取knowledge列表")
         return self.myAnalyticDB.get_collections()
 
-    def delete_knowledge(self, knowledge_name):
-        print(f"删除 {knowledge_name}")
-        vector_store = self.load_vector_store(knowledge_name)
-        return vector_store.delete_collection()
-
-    def change_knowledge(self, knowledge_name, new_knowledge_name):
-        print(f"修改 {knowledge_name} 为 {new_knowledge_name}")
-        vector_store = self.load_vector_store(knowledge_name)
-        return vector_store.change_collection(new_knowledge_name)
-
     def change_prompt(self, knowledge_name, prompt):
         print(f"修改 {knowledge_name} 的prompt为 {prompt}")
         return self.myAnalyticDB.change_prompt(knowledge_name, prompt)
 
     def get_prompt(self, knowledge_name):
         return self.myAnalyticDB.get_prompt(knowledge_name) or PROMPT_TEMPLATE
-
-# if __name__ == "__main__":
-#     # 初始化消息
-#     args = None
-#     args = parser.parse_args(args=['--model-dir', '/media/checkpoint/', '--model', 'chatglm-6b', '--no-remote-model'])
-#
-#     args_dict = vars(args)
-#     shared.loaderCheckPoint = LoaderCheckPoint(args_dict)
-#     llm_model_ins = shared.loaderLLM()
-#
-#     local_doc_qa = LocalDocQA()
-#     local_doc_qa.init_cfg(llm_model=llm_model_ins)
-#     query = "本项目使用的embedding模型是什么，消耗多少显存"
-#     vs_path = "/media/gpt4-pdf-chatbot-langchain/dev-langchain-ChatGLM/vector_store/test"
-#     last_print_len = 0
-#     # for resp, history in local_doc_qa.get_knowledge_based_answer(query=query,
-#     #                                                              vs_path=vs_path,
-#     #                                                              chat_history=[],
-#     #                                                              streaming=True):
-#     for resp, history in local_doc_qa.get_search_result_based_answer(query=query,
-#                                                                      chat_history=[],
-#                                                                      streaming=True):
-#         print(resp["result"][last_print_len:], end="", flush=True)
-#         last_print_len = len(resp["result"])
-#     source_text = [f"""出处 [{inum + 1}] {doc.metadata['source'] if doc.metadata['source'].startswith("http")
-#     else os.path.split(doc.metadata['source'])[-1]}：\n\n{doc.page_content}\n\n"""
-#                    # f"""距离：{doc.metadata['score']}\n\n"""
-#                    for inum, doc in
-#                    enumerate(resp["source_documents"])]
-#     logger.info("\n\n" + "\n\n".join(source_text))
-#     pass

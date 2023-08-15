@@ -118,6 +118,8 @@ class MyAnalyticDB(VectorStore):
                 collections_table.create(conn, checkfirst=True)
         return collections_table
 
+    def get_collection_name(self) -> str:
+        return self.__collection_name
     def check_collection_if_exists(self, collection_name: str) -> bool:
         """ Check if the collection in collections set """
         if collection_name == LANGCHAIN_DEFAULT_COLLECTIONS_NAME:  # 表名不能和collections set相同
@@ -205,6 +207,7 @@ class MyAnalyticDB(VectorStore):
                 self.__base.metadata.remove(self.__collection_table)
                 conn.execute(delete_collection_record)
                 self.__collection_name = None
+                self.__collection_table = None
 
     def change_collection(self, new_collection_name) -> None:
         if self.__collection_table is None or self.__collections_set is None:
