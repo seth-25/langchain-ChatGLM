@@ -14,7 +14,7 @@ from langchain.vectorstores.base import VectorStore
 
 from configs.model_config import *
 from textsplitter.markdown_splitter import md_headers
-from utils.regular_util import match_brackets_at_start, remove_brackets_at_start
+from utils.regular_util import match_brackets_at_start, remove_brackets_at_start, add_enter_after_brackets
 from utils.file_util import get_filename_from_source
 
 try:
@@ -655,21 +655,34 @@ class MyAnalyticDB(VectorStore):
                         page_content=result.document,
                         metadata=result.metadata,
                     )
-                    doc.metadata["content"] = doc.page_content
+                    if result.source.lower().endswith(".md"):
+                        doc.metadata["content"] = add_enter_after_brackets(doc.page_content, markdown=True)
+                    else:
+                        doc.metadata["content"] = add_enter_after_brackets(doc.page_content, markdown=False)
                     doc_score = result.distance
                 else:
                     result = id_map[id]
-                    result_page_content = result.document
+                    remove_brackets_page_content = result.document
                     last_res = id_map[id - 1]  # 上一个文本
                     # 开启标题增强的情况下，如果当前文本和上一个文本标题相同，去掉当前文本的标题。
                     if match_brackets_at_start(last_res.document) == match_brackets_at_start(result.document):
-                        result_page_content = remove_brackets_at_start(result.document)
+                        remove_brackets_page_content = remove_brackets_at_start(result.document)
 
-                    if REMOVE_TITLE:  # 有时候大模型会把标题也混入答案中。可选择去掉标题，但查询可能不全
-                        doc.page_content += "\n" + result_page_content
+                    if result.source.lower().endswith(".md"):  # 是markdown，文本切分自带换行，添加上下文不需要换行
+                        if REMOVE_TITLE:  # 有时候大模型会把标题也混入答案中。可选择去掉相同标题，但文本太长回答可能不全，模型无法理解哪些与标题有关
+                            doc.page_content += remove_brackets_page_content
+                        else:
+                            doc.page_content += result.document
+                        doc.metadata["content"] += add_enter_after_brackets(
+                            remove_brackets_page_content, markdown=True)  # 去除重复标题，并在标题后加两行回车，方便在webui显示
                     else:
-                        doc.page_content += "\n" + result.document
-                    doc.metadata["content"] += "\n" + result_page_content  # 去除标题，方便在webui显示
+                        if REMOVE_TITLE:  # 有时候大模型会把标题也混入答案中。可选择去掉相同标题，但文本太长回答可能不全，模型无法理解哪些与标题有关
+                            doc.page_content += "\n" + remove_brackets_page_content
+                        else:
+                            doc.page_content += "\n" + result.document
+                        doc.metadata["content"] += "\n" + add_enter_after_brackets(
+                            remove_brackets_page_content, markdown=False)  # 去除重复标题，并在标题后加1行回车，方便在webui显示
+
                     doc_score = min(doc_score, result.distance)
             if not isinstance(doc, Document) or doc_score is None:
                 raise ValueError(f"Could not find document, got {doc}")

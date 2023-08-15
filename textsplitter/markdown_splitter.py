@@ -3,6 +3,7 @@ from langchain.document_loaders import TextLoader
 from langchain.text_splitter import MarkdownHeaderTextSplitter, RecursiveCharacterTextSplitter
 from langchain.docstore.document import Document
 from typing import List, Any, Optional, Iterable
+from .markdown_header_splitter import MarkdownHeaderTextSplitter
 
 from configs.model_config import *
 from utils.file_util import get_filename_from_source
@@ -62,6 +63,15 @@ class MyRecursiveCharacterTextSplitter(RecursiveCharacterTextSplitter):
         super().__init__(keep_separator=keep_separator, **kwargs)
         self._separators = separators
 
+
+    def _join_docs(self, docs: List[str], separator: str) -> Optional[str]:
+        text = separator.join(docs)
+        # text = text.strip()   # 不去除换行，保留markdown格式
+        if text == "":
+            return None
+        else:
+            return text
+
     def _split_text(self, text: str, separators: List[str]) -> List[str]:
         """Split incoming text and return chunks."""
         final_chunks = []
@@ -79,10 +89,11 @@ class MyRecursiveCharacterTextSplitter(RecursiveCharacterTextSplitter):
         if separator == self._separators[1]:  # 有代码
             splits = _split_text_by_code_blocks(text, self._separators[1])
         else:
-            text = re.sub(r" {3,}", r" ", text)  # 超过2个的空格替换成一个（表格经常包含大量空格）
+            # text = re.sub(r" {3,}", r" ", text)  # 超过2个的空格替换成一个（表格经常包含大量空格）
+            text = re.sub(r" {20,}", r"", text)  # 超过20个的空格就不太可能是缩进了（表格经常包含大量空格），较少的空格则保留markdown缩进
             text = re.sub(r"-{4,}", r"---", text)  # 超过3个的-替换成一个（表格经常包含大量-）
             splits = _split_text_with_regex(text, separator, self._keep_separator)
-        # print(text)
+        # print([text])
         # print("separator:", [separator])
         # print(splits)
         # print("==================")
@@ -130,7 +141,7 @@ class MyMarkdownTextSplitter(MyRecursiveCharacterTextSplitter):
             # Note that this splitter doesn't handle horizontal lines defined
             # by *three or more* of ***, ---, or ___, but this is not handled
             "\n\n",
-            "\n",
+            "\n[^\n]",
             "。",
             "；",
             ";",
@@ -173,13 +184,13 @@ def my_md_split(filepath, sentence_size=SENTENCE_SIZE, sentence_overlap=SENTENCE
         md_header_splits = header_splitter.split_text(markdown_document.page_content)
 
         # 按separators递归拆分
-        text_splitter = MyMarkdownTextSplitter(chunk_size=sentence_size, chunk_overlap=sentence_overlap)
+        text_splitter = MyMarkdownTextSplitter(chunk_size=sentence_size, chunk_overlap=sentence_overlap, keep_separator=True)
         docs = text_splitter.split_documents(md_header_splits)
 
         docs = md_title_enhance(docs, filepath)
     else:
         # 按separators递归拆分
-        text_splitter = MyMarkdownTextSplitter(chunk_size=sentence_size, chunk_overlap=sentence_overlap)
+        text_splitter = MyMarkdownTextSplitter(chunk_size=sentence_size, chunk_overlap=sentence_overlap, keep_separator=True)
         docs = text_splitter.split_documents([markdown_document])
 
     for doc in docs:

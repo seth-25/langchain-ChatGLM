@@ -16,7 +16,10 @@ def remove_brackets_at_start(text):
     return result
 
 
-def add_enter_after_brackets(text):
+def add_enter_after_brackets(text, markdown=False):
     pattern = r'^【.*?】'
-    replacement = r'\g<0>\n'
+    if markdown:
+        replacement = r'\g<0>\n\n'
+    else:
+        replacement = r'\g<0>\n'
     return re.sub(pattern, replacement, text, flags=re.MULTILINE)

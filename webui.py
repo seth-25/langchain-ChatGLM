@@ -141,8 +141,8 @@ def get_answer(query, keyword, knowledge_name, chatbot, history, mode, score_thr
                 else:
                     source += f"""<details> <summary>【出处{i + 1}】：{os.path.split(doc.metadata["source"])[-1]} &nbsp;&nbsp;&nbsp; 【距离】：{doc.metadata['score']}</summary>"""
                 if os.path.split(doc.metadata["source"])[-1].lower().endswith(".md"):  # 是markdown
-                    doc_page_content = parse_code(doc.metadata["content"])  # 除了代码以外的加两个回车，便于markdown_to_html识别
-                    # doc_page_content = parse_code(add_enter_after_brackets(doc.metadata["content"]))  # 除了代码以外的加两个回车，便于markdown_to_html识别
+                    # doc_page_content = parse_code(doc.metadata["content"])  # 除了代码以外的加两个回车，便于markdown_to_html识别
+                    doc_page_content = doc.metadata["content"]
                     source += f"""{markdown_to_html(doc_page_content)}"""
                     # print("================")
                     # print(doc_page_content)
