@@ -1,7 +1,7 @@
 from langchain.embeddings.base import Embeddings
 from langchain.embeddings.huggingface import HuggingFaceEmbeddings
 
-from textsplitter.my_markdown_splitter import my_md_split
+from textsplitter.markdown_splitter import my_md_split
 from vectorstores import MyFAISS, MyAnalyticDB
 from langchain.document_loaders import UnstructuredFileLoader, TextLoader, CSVLoader
 from configs.model_config import *
