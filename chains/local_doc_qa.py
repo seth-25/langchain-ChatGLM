@@ -210,7 +210,7 @@ class LocalDocQA:
             related_docs_with_score = vector_store.similarity_search(keyword, k=self.top_k)
         torch_gc()
         if len(related_docs_with_score) > 0:
-            prompt = generate_prompt(related_docs_with_score, query)
+            prompt = generate_prompt(related_docs_with_score, query, prompt_template=self.get_prompt(knowledge_name))
         else:
             prompt = query
 
@@ -327,6 +327,13 @@ class LocalDocQA:
         print(f"修改 {knowledge_name} 为 {new_knowledge_name}")
         vector_store = self.load_vector_store(knowledge_name)
         return vector_store.change_collection(new_knowledge_name)
+
+    def change_prompt(self, knowledge_name, prompt):
+        print(f"修改 {knowledge_name} 的prompt为 {prompt}")
+        return self.myAnalyticDB.change_prompt(knowledge_name, prompt)
+
+    def get_prompt(self, knowledge_name):
+        return self.myAnalyticDB.get_prompt(knowledge_name) or PROMPT_TEMPLATE
 
 # if __name__ == "__main__":
 #     # 初始化消息

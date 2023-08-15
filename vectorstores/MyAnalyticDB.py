@@ -4,7 +4,7 @@ import sys
 
 from langchain.vectorstores.analyticdb import Base
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple, Type
-from sqlalchemy import Column, String, Table, create_engine, insert, text, select, Integer, func, and_
+from sqlalchemy import Column, String, Table, create_engine, insert, text, select, Integer, func, and_, column
 from sqlalchemy.dialects.postgresql import ARRAY, JSON, TEXT, REAL
 
 from langchain.docstore.document import Document
@@ -13,7 +13,7 @@ from langchain.utils import get_from_dict_or_env
 from langchain.vectorstores.base import VectorStore
 
 from configs.model_config import *
-from textsplitter.my_markdown_splitter import md_headers
+from textsplitter.markdown_splitter import md_headers
 from utils.regular_util import match_brackets_at_start, remove_brackets_at_start
 from utils.file_util import get_filename_from_source
 
@@ -95,24 +95,28 @@ class MyAnalyticDB(VectorStore):
     def init_collection(self) -> None:
         if self.pre_delete_collection:
             self.delete_collection()
-        self.__collections_set = self.create_collections_if_not_exists()
+        self.__collections_set = self.create_collections_set_if_not_exists()
 
-        # 初始化MyAnalyticDB不创建collection的Table和绑定self.collection_table，由用户调用接口创建，或者set_collection_name时创建
+        # 初始化MyAnalyticDB不创建collection的Table和绑定self.collection_table，由用户调用接口create_table创建，或者set_collection_name时创建
         # self.collection_table, table_is_exist = self.create_table_if_not_exists()
 
-    def create_collections_if_not_exists(self) -> Table:
+    def create_collections_set_if_not_exists(self) -> Table:
         # Define the dynamic collections set table
         collections_table = Table(
             LANGCHAIN_DEFAULT_COLLECTIONS_NAME,
             self.__base.metadata,
             Column('id', TEXT, primary_key=True, default=uuid.uuid4),
-            Column('collection_name', String),
+            Column('collection_name', TEXT),
+            Column('prompt', String, nullable=True),
+            Column('embedding_model', TEXT, nullable=True),
+            Column('dim', Integer, nullable=True),
             extend_existing=True,
         )
         with self.engine.connect() as conn:
             with conn.begin():
                 # Create the table
                 self.__base.metadata.create_all(conn)
+                # collections_table.create(conn, checkfirst=True)
         return collections_table
 
     def check_collection_if_exists(self, collection_name) -> bool:
@@ -196,12 +200,15 @@ class MyAnalyticDB(VectorStore):
                 # Add the collection in collections set if it doesn't exist
                 if not collection_result:
                     table_is_exist = False
-                    ins = self.__collections_set.insert().values(collection_name=collection_name)
+                    ins = self.__collections_set.insert().values(collection_name=collection_name,
+                                                                 prompt=PROMPT_TEMPLATE,
+                                                                 embedding_model=EMBEDDING_MODEL,
+                                                                 dim=LANGCHAIN_DEFAULT_EMBEDDING_DIM)
                     conn.execute(ins)
         return collection_table, table_is_exist
 
     def delete_collection(self) -> None:
-        if self.__collection_table is None:
+        if self.__collection_table is None or self.__collections_set is None:
             raise Exception("尚未绑定知识库")
         self.logger.debug("Trying to delete knowledge")
         drop_statement = text(f"""DROP TABLE IF EXISTS "{self.__collection_name}";""")
@@ -214,15 +221,17 @@ class MyAnalyticDB(VectorStore):
                 conn.execute(delete_collection_record)
 
     def change_collection(self, new_collection_name) -> None:
-        if self.__collection_table is None:
+        if self.__collection_table is None or self.__collections_set is None:
             raise Exception("尚未绑定知识库")
         alert_statement = text(f"""ALTER TABLE "{self.__collection_name}" RENAME TO "{new_collection_name}";""")
         alert_index_statement = text(
             f"""ALTER INDEX "{self.__collection_name}_embedding_idx" RENAME TO "{new_collection_name}_embedding_idx";""")
         alert_id_seq_statement = text(
             f"""ALTER TABLE "{self.__collection_name}_id_seq" RENAME TO "{new_collection_name}_id_seq";""")
-        update_collection_record = text(
-            f"""UPDATE {LANGCHAIN_DEFAULT_COLLECTIONS_NAME} SET collection_name = '{new_collection_name}' WHERE collection_name = '{self.__collection_name}';""")
+        # f"""UPDATE {LANGCHAIN_DEFAULT_COLLECTIONS_NAME} SET collection_name = '{new_collection_name}' WHERE collection_name = '{self.__collection_name}';""")
+        update_collection_record = self.__collections_set.update().where(
+            self.__collections_set.c.collection_name == self.__collection_name).values(
+            collection_name=new_collection_name)
         with self.engine.connect() as conn:
             with conn.begin():
                 conn.execute(alert_statement)
@@ -244,6 +253,22 @@ class MyAnalyticDB(VectorStore):
             self.__base.metadata.remove(self.__collection_table)
         self.__collection_name = collection_name
         self.__collection_table, table_is_exist = self.create_table_if_not_exists()
+
+    def change_prompt(self, collection_name, prompt) -> None:
+        update_collection_prompt = self.__collections_set.update().where(
+            self.__collections_set.c.collection_name == collection_name).values(prompt=prompt)
+        with self.engine.connect() as conn:
+            with conn.begin():
+                conn.execute(update_collection_prompt)
+
+    def get_prompt(self, collection_name: str) -> str:
+        select_collection_prompt = select(self.__collections_set.c.prompt).where(
+            self.__collections_set.c.collection_name == collection_name)
+        with self.engine.connect() as conn:
+            with conn.begin():
+               result = conn.execute(select_collection_prompt).first()
+        return result.prompt
+
 
     def delete(self, ids: Optional[List[str]] = None, **kwargs: Any) -> Optional[bool]:
         """Delete by vector IDs.
@@ -649,7 +674,7 @@ class MyAnalyticDB(VectorStore):
                     if match_brackets_at_start(last_res.document) == match_brackets_at_start(result.document):
                         result_page_content = remove_brackets_at_start(result.document)
 
-                    if REMOVE_TITLE:    # 有时候大模型会把标题也混入答案中。可选择去掉标题，但查询可能不全
+                    if REMOVE_TITLE:  # 有时候大模型会把标题也混入答案中。可选择去掉标题，但查询可能不全
                         doc.page_content += "\n" + result_page_content
                     else:
                         doc.page_content += "\n" + result.document

@@ -245,6 +245,26 @@ async def delete_kb(
     return BaseResponse(code=200, msg=f"知识库 {knowledge_base_id} 删除成功")
 
 
+async def change_prompt(
+        knowledge_base_id: str = Form(...,
+                                      description="Knowledge Base Name",
+                                      example="kb"),
+        prompt: str = Form(...,
+                           description="Knowledge Base Prompt",
+                           example="""【已知信息】{context} 
+                                                     【问题】{question}
+                                                    【指令】根据已知信息，详细和准确的来回答问题。如果无法从中得到答案，请说 “根据已知信息无法回答该问题”，不允许在答案中添加编造成分，答案请使用中文。"""),
+):
+    if not validate_kb_name(knowledge_base_id):
+        return BaseResponse(code=403, msg="Don't attack me")
+    if "{context}" not in prompt or "{question}" not in prompt:
+        return BaseResponse(code=500, msg="prompt需要包含{context}和{question}")
+    if not local_doc_qa.check_knowledge_in_collections(knowledge_base_id):
+        return BaseResponse(code=404, msg=f"知识库 {knowledge_base_id} 不存在")
+    local_doc_qa.change_prompt(knowledge_base_id, prompt)
+    return BaseResponse(code=200, msg=f"知识库 {knowledge_base_id} 的prompt成功修改为 {prompt} ")
+
+
 async def delete_doc(
         knowledge_base_id: str = Query(...,
                                        description="Knowledge Base Name",
@@ -616,10 +636,10 @@ def api_start(host, port, **kwargs):
 
     app.post("/local_doc_qa/create_knowledge_base", response_model=BaseResponse, summary="创建知识库")(create_kb)
     app.post("/local_doc_qa/change_knowledge_base", response_model=BaseResponse, summary="修改知识库名称")(change_kb)
+    app.post("/local_doc_qa/change_prompt", response_model=BaseResponse, summary="修改知识库prompt")(change_prompt)
     app.post("/local_doc_qa/upload_file", response_model=BaseResponse, summary="上传文件到知识库")(upload_file)
     app.post("/local_doc_qa/upload_files", response_model=BaseResponse, summary="批量上传文件到知识库")(upload_files)
-    app.post("/local_doc_qa/local_doc_chat", response_model=ChatMessage, summary="与知识库对话，根据问题搜索知识")(
-        local_doc_chat)
+    app.post("/local_doc_qa/local_doc_chat", response_model=ChatMessage, summary="与知识库对话，根据问题搜索知识")(local_doc_chat)
     app.post("/local_doc_qa/local_doc_chat_with_keyword", response_model=ChatMessage,
              summary="与知识库对话，根据关键词搜索知识")(local_doc_chat_with_keyword)
     app.post("/local_doc_qa/bing_search_chat", response_model=ChatMessage, summary="与必应搜索对话")(bing_search_chat)
