@@ -141,7 +141,7 @@ class MyMarkdownTextSplitter(MyRecursiveCharacterTextSplitter):
             # Note that this splitter doesn't handle horizontal lines defined
             # by *three or more* of ***, ---, or ___, but this is not handled
             "\n\n",
-            "\n[^\n]",
+            "\n+",  # 因为保留了两个回车换行，此处匹配要防止对两个回车的前一个回车切分
             "。",
             "；",
             ";",

@@ -690,6 +690,10 @@ class MyAnalyticDB(VectorStore):
             # 和langchain不同，chatglm会多一步把score写入metadata
             doc.metadata["score"] = round(doc_score, 3)
             documents_with_scores.append((doc, doc_score))
+
+            if SORT_BY_DISTANCE:
+                documents_with_scores = sorted(documents_with_scores, key=lambda documents_with_scores: documents_with_scores[1])
+
         return documents_with_scores
 
     @classmethod

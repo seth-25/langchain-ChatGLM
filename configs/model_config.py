@@ -34,7 +34,7 @@ embedding_model_dict = {
 }
 
 # Embedding model name
-EMBEDDING_MODEL = "text2vec"    # dim=1024
+EMBEDDING_MODEL = "text2vec"  # dim=1024
 # EMBEDDING_MODEL = "m3e-base"  # dim=768
 
 # Embedding running device
@@ -238,8 +238,9 @@ llm_model_dict = {
 }
 
 # LLM 名称
-LLM_MODEL = "chatglm2-6b-32k"
-# LLM_MODEL = "chatglm2-6b-int4"
+# LLM_MODEL = "chatglm2-6b-32k"
+# LLM_MODEL = "chatglm2-6b"
+LLM_MODEL = "chatglm-fitness-RLHF"
 
 # LLM的最大token数
 MAX_LENGTH = 20480
@@ -276,10 +277,6 @@ LLM_DEVICE = "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mp
 KB_ROOT_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "knowledge_base")
 
 # 基于上下文的prompt模版，请务必保留"{question}"和"{context}"
-# PROMPT_TEMPLATE = """已知信息：
-# {context}
-#
-# 根据已知信息，详细和准确地来回答用户的问题。如果已知信息不足以回答问题，请回答“根据已知信息无法回答该问题”。不允许在答案中添加编造成分，不要让【】内的内容出现在答案里，答案请使用中文。 问题是：{question}"""
 
 PROMPT_TEMPLATE = """【已知信息】{context} 
 
@@ -387,3 +384,5 @@ MD_TITLE_ENHANCE = True  # 将markdown标题和文本融合
 MD_TITLE_ENHANCE_ADD_FILENAME = False  # 是否将文件名也加入markdown标题
 REMOVE_TITLE = False  # 向模型输入提问时，移除拼接文本重复的markdown标题，在开启上下文功能，且开启MD_TITLE_ENHANCE或ZH_TITLE_ENHANCE时才有效
 MD_TITLE_SPLIT = 1  # 上下文拼接时，几级标题不同就不再拼接，值为1～6
+
+SORT_BY_DISTANCE = True  # 将提供的多条知识按照score排序，可能会打乱输入顺序，但是当信息量过大（无关信息多时），优先给模型有关的信息有助于理解
