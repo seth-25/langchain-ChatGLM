@@ -91,3 +91,13 @@ class ChineseTextSplitter(CharacterTextSplitter):
         if CHINESE_TEXT_SPLITTER_MERGE_SPLIT:
             text_list = self.merge_text(text_list)
         return text_list
+
+
+if __name__ == "__main__":
+    chinese_text_splitter = ChineseTextSplitter(False, 50)
+    text = """DarkComet （暗黑彗星）是由 Jean-Pierre Lesueur（称为 DarkCoderSc）开发的远程访问木马（称为 RAT），在 2012 年初开始扩散，它用于许多有针对性的攻击192.168.1.1，能够通过网络摄像头拍照，通过连接到 PC 的麦克风窃听对话，并获得对受感染机器的完全控制。该 RAT 还以其键盘记录和文件传输功能而闻名，因此，任何远程攻击者都可以将任何文件加载到受感染的机器上，甚至窃取管理员权限、计算机/用户名、语言/国家、操作系统信息、使用的内存、网络摄像头信息、文档等。它会禁用任务管理器、注册表编辑器和文件夹选项，修改注册表项以禁用 Windows 防火墙设置，此操作允许此恶意进程执行而不会被 Windows 防火墙检测到。别名有：Fynloski、Krademok、DarkKomet 等。
+    """
+    # text_list = chinese_text_splitter.split_text1(text)
+    text_list = chinese_text_splitter.split_text(text)
+    for t in text_list:
+        print(t)

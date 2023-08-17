@@ -9,7 +9,7 @@ from configs.model_config import *
 from utils.file_util import get_filename_from_source
 
 """
-对url和代码段进行替换的为占位符，url和代码段的内容写入metadata里，不会进入embedding
+不对url和代码段进行替换的版本，代码段不会被切分，但url和代码段都会丢到embedding模型中以向量形式进入知识库
 """
 
 md_headers = [
@@ -20,9 +20,6 @@ md_headers = [
     ("#####", "Header 5"),
     ("######", "Header 6"),
 ]
-
-md_url_placeholder = "URL_TEXT"
-md_code_placeholder = "CODE_TEXT"
 
 
 def _split_text_by_code_blocks(text, code_pattern):
@@ -48,12 +45,12 @@ def _split_text_with_regex(
     if separator:
         if keep_separator:
             # The parentheses in the pattern keep the delimiters in the result.
-            _splits = re.split(f"({separator})", text, flags=re.DOTALL)
+            _splits = re.split(f"({separator})", text)
             splits = [_splits[i] + _splits[i + 1] for i in range(0, len(_splits) - 1, 2)]
             if len(_splits) % 2 == 1:
                 splits += _splits[-1:]
         else:
-            splits = re.split(separator, text, flags=re.DOTALL)
+            splits = re.split(separator, text)
     else:
         splits = list(text)
     return [s for s in splits if s != ""]
@@ -88,13 +85,14 @@ class MyRecursiveCharacterTextSplitter(RecursiveCharacterTextSplitter):
             if _s == "":
                 separator = _s
                 break
-            if re.search(_s, text, flags=re.DOTALL):
+            if re.search(_s, text):
                 separator = _s
                 new_separators = separators[i + 1:]  # 下几级的separators
                 break
         if separator == self._separators[1]:  # 有代码
             splits = _split_text_by_code_blocks(text, self._separators[1])
         else:
+            # text = re.sub(r" {3,}", r" ", text)  # 超过2个的空格替换成一个（表格经常包含大量空格）
             text = re.sub(r" {20,}", r"", text)  # 超过20个的空格就不太可能是缩进了（表格经常包含大量空格）；较少的空格则是markdown缩进，需要保留
             text = re.sub(r"-{4,}", r"---", text)  # 超过3个的-替换成一个（表格经常包含大量-）
             splits = _split_text_with_regex(text, separator, self._keep_separator)
@@ -107,8 +105,7 @@ class MyRecursiveCharacterTextSplitter(RecursiveCharacterTextSplitter):
         _separator = "" if self._keep_separator else separator
 
         for s in splits:
-            if self._length_function(s) < self._chunk_size or re.search(self._separators[1], s,
-                                                                        flags=re.DOTALL):  # 长度满足要求或是代码块，不递归切分
+            if self._length_function(s) < self._chunk_size or re.search(self._separators[1], s):  # 长度满足要求或是代码块，不递归切分
                 _good_splits.append(s)
             else:
                 if _good_splits:
@@ -155,7 +152,7 @@ class MyMarkdownTextSplitter(MyRecursiveCharacterTextSplitter):
             ",",
             "、",
             " ",
-            r"{URL_TEXT\d}|{CODE_TEXT\d}|.",  # 匹配任何字符，在任意位置均可切分，除了URL_TEXT和CODE_TEXT的占位符
+            "",
         ]
         super().__init__(separators=separators, **kwargs)
 
@@ -178,70 +175,21 @@ def _md_title_enhance(docs: List[Document], filepath) -> List[Document]:
         print("文件不存在")
 
 
-def _md_code_url_replace(page_content: str, url_dict: dict, code_dict: dict):
-    # ()除了用于分组，还有匹配子表达式的功能，配合?:防止匹配子表达式http/ftp/file
-    url_pattern = r"(?:https?|ftp|file)://[-A-Za-z0-9+&@#/%?=~_|!:,.;]+[-A-Za-z0-9+&@#/%=~_|]"
-    url_blocks = re.findall(url_pattern, page_content, re.DOTALL)
-    for url_block1 in url_blocks:   # 文档可能有重复的url，或者一个url是另一个url的子链，去重
-        for url_block2 in url_blocks:
-            if url_block2 in url_block1 and url_block2 != url_block1:
-                url_blocks.remove(url_block2)
-    url_blocks = set(url_blocks)
-    for i, url_block in enumerate(url_blocks):
-        print(i, url_block)
-        page_content = page_content.replace(url_block, f'{{URL_TEXT{i}}}')
-        url_dict[i] = url_block
-
-    code_pattern = r"```.*?````*"
-    code_blocks = re.findall(code_pattern, page_content, re.DOTALL)
-    code_blocks = set(code_blocks)  # 文档可能有重复的code，去重。一般不会出现代码块套代码块
-    for i, code_block in enumerate(code_blocks):
-        page_content = page_content.replace(code_block, f'{{CODE_TEXT{i}}}')
-        code_dict[i] = code_block
-    return page_content
-
-
-def _md_write_code_url_in_metadata(docs: list[Document], url_dict: dict, code_dict: dict):
-    for i, doc in enumerate(docs):
-        docs[i].metadata["CODE_NUM"] = []
-        docs[i].metadata["URL_NUM"] = []
-        docs[i].metadata["CODE_LEN"] = 0    # todo 可根据code_len考虑是否召回
-        for j, code in code_dict.items():
-            code_placeholder = f"{{{md_code_placeholder}{j}}}"
-            if code_placeholder in doc.page_content:
-                docs[i].metadata["CODE_NUM"].append(j)
-                docs[i].metadata["CODE_LEN"] += len(code)
-                docs[i].metadata[code_placeholder] = code
-
-        for j, url in url_dict.items():
-            url_placeholder = f"{{{md_url_placeholder}{j}}}"
-            if url_placeholder in doc.page_content:
-                docs[i].metadata["URL_NUM"].append(j)
-                docs[i].metadata[url_placeholder] = url
-
-
 def my_md_split(filepath, sentence_size=SENTENCE_SIZE, sentence_overlap=SENTENCE_OVERLAP):
     # 获取文本
     loader = TextLoader(filepath)
     markdown_document: Document = loader.load()[0]
-    page_content = markdown_document.page_content
-
-    url_dict = {}
-    code_dict = {}
-    if MD_REPLACE_CODE_AND_URL:
-        # 先将url和code替换成占位符
-        page_content = _md_code_url_replace(page_content, url_dict, code_dict)
 
     # 每段文本前加如标题
     if MD_TITLE_ENHANCE:
         # 按标题拆分，并将标题写入metadata
         header_splitter = MarkdownHeaderTextSplitter(headers_to_split_on=md_headers, return_each_line=False)
-        docs = header_splitter.split_text(page_content)
+        md_header_splits = header_splitter.split_text(markdown_document.page_content)
 
         # 按separators递归拆分
         text_splitter = MyMarkdownTextSplitter(chunk_size=sentence_size, chunk_overlap=sentence_overlap,
                                                keep_separator=True)
-        docs = text_splitter.split_documents(docs)
+        docs = text_splitter.split_documents(md_header_splits)
 
         docs = _md_title_enhance(docs, filepath)
     else:
@@ -249,10 +197,6 @@ def my_md_split(filepath, sentence_size=SENTENCE_SIZE, sentence_overlap=SENTENCE
         text_splitter = MyMarkdownTextSplitter(chunk_size=sentence_size, chunk_overlap=sentence_overlap,
                                                keep_separator=True)
         docs = text_splitter.split_documents([markdown_document])
-
-    if MD_REPLACE_CODE_AND_URL:
-        # 根据占位符，将url和code写入metadata
-        _md_write_code_url_in_metadata(docs, url_dict, code_dict)
 
     for doc in docs:
         doc.metadata["source"] = filepath

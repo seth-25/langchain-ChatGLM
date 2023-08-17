@@ -157,9 +157,6 @@ class MarkdownHeaderTextSplitter:
             lines_with_metadata.append(
                 {"content": "\n".join(current_content), "metadata": current_metadata}
             )
-        # print("lines_with_metadata")
-        # for line in lines_with_metadata:
-        #     print(line)
 
         # lines_with_metadata has each line with associated header metadata
         # aggregate these into chunks based on common metadata

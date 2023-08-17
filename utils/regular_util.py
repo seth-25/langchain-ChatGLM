@@ -17,6 +17,7 @@ def remove_brackets_at_start(text):
 
 
 def add_enter_after_brackets(text, markdown=False):
+    """在标题后加回车，方便在webui显示"""
     pattern = r'^【.*?】'
     if markdown:
         replacement = r'\g<0>\n\n'

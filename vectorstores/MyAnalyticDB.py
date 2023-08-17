@@ -4,7 +4,7 @@ import sys
 
 from langchain.vectorstores.analyticdb import Base
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple, Type
-from sqlalchemy import Column, String, Table, create_engine, insert, text, select, Integer, func, and_, column
+from sqlalchemy import Column, String, Table, create_engine, insert, text, select, Integer, func, and_
 from sqlalchemy.dialects.postgresql import ARRAY, JSON, TEXT, REAL
 
 from langchain.docstore.document import Document
@@ -14,7 +14,7 @@ from langchain.vectorstores.base import VectorStore
 
 from configs.model_config import *
 from textsplitter.markdown_splitter import md_headers
-from utils.regular_util import match_brackets_at_start, remove_brackets_at_start, add_enter_after_brackets
+from utils.analyticdb_util import generate_doc_with_score, merge_ids
 from utils.file_util import get_filename_from_source
 
 try:
@@ -524,6 +524,7 @@ class MyAnalyticDB(VectorStore):
             id_map[result.id] = result
             docs_len = len(result.document)
 
+            # 上下文拼接
             last_l = result.id - 1  # 上一次搜索区间范围上界的前一个
             last_r = result.id + 1  # 上一次搜索区间范围下界的下一个
             for width in range(10, max_id + batch_size, batch_size):  # width是区间宽度/2，从10开始，一次向前后分别拓宽batch_size个
@@ -626,73 +627,13 @@ class MyAnalyticDB(VectorStore):
                 last_l = result.id - width - 1
                 last_r = result.id + width + 1
             # print("查询次数", count)
+        # k个答案拼接完成
+
         if len(id_set) == 0:
             return []
-        # print("id_set", id_set)
-        id_list = sorted(list(id_set))
-        # 连续的id分在一起，成为一个id seq
-        id_seqs = []  # 存一个个连续的id seq
-        id_seq = [id_list[0]]
-        for i in range(1, len(id_list)):
-            if id_list[i - 1] + 1 == id_list[i]:
-                id_seq.append(id_list[i])
-            else:
-                id_seqs.append(id_seq)
-                id_seq = [id_list[i]]
-        id_seqs.append(id_seq)
 
-        # print("id_seqs", id_seqs)
-
-        documents_with_scores = []
-        # 将一个连续的id seq拼成一个doc
-        for id_seq in id_seqs:
-            doc: Document = None
-            doc_score = None
-            for id in id_seq:
-                if id == id_seq[0]:
-                    result = id_map[id]
-                    doc = Document(
-                        page_content=result.document,
-                        metadata=result.metadata,
-                    )
-                    if result.source.lower().endswith(".md"):
-                        doc.metadata["content"] = add_enter_after_brackets(doc.page_content, markdown=True)
-                    else:
-                        doc.metadata["content"] = add_enter_after_brackets(doc.page_content, markdown=False)
-                    doc_score = result.distance
-                else:
-                    result = id_map[id]
-                    remove_brackets_page_content = result.document
-                    last_res = id_map[id - 1]  # 上一个文本
-                    # 开启标题增强的情况下，如果当前文本和上一个文本标题相同，去掉当前文本的标题。
-                    if match_brackets_at_start(last_res.document) == match_brackets_at_start(result.document):
-                        remove_brackets_page_content = remove_brackets_at_start(result.document)
-
-                    if result.source.lower().endswith(".md"):  # 是markdown，文本切分自带换行，添加上下文不需要换行
-                        if REMOVE_TITLE:  # 有时候大模型会把标题也混入答案中。可选择去掉相同标题，但文本太长回答可能不全，模型无法理解哪些与标题有关
-                            doc.page_content += remove_brackets_page_content
-                        else:
-                            doc.page_content += result.document
-                        doc.metadata["content"] += add_enter_after_brackets(
-                            remove_brackets_page_content, markdown=True)  # 去除重复标题，并在标题后加两行回车，方便在webui显示
-                    else:
-                        if REMOVE_TITLE:  # 有时候大模型会把标题也混入答案中。可选择去掉相同标题，但文本太长回答可能不全，模型无法理解哪些与标题有关
-                            doc.page_content += "\n" + remove_brackets_page_content
-                        else:
-                            doc.page_content += "\n" + result.document
-                        doc.metadata["content"] += "\n" + add_enter_after_brackets(
-                            remove_brackets_page_content, markdown=False)  # 去除重复标题，并在标题后加1行回车，方便在webui显示
-
-                    doc_score = min(doc_score, result.distance)
-            if not isinstance(doc, Document) or doc_score is None:
-                raise ValueError(f"Could not find document, got {doc}")
-
-            # 和langchain不同，chatglm会多一步把score写入metadata
-            doc.metadata["score"] = round(doc_score, 3)
-            documents_with_scores.append((doc, doc_score))
-
-            if SORT_BY_DISTANCE:
-                documents_with_scores = sorted(documents_with_scores, key=lambda documents_with_scores: documents_with_scores[1])
+        id_seqs = merge_ids(id_set)  # 连续的id分在一起，成为一个id seq
+        documents_with_scores = generate_doc_with_score(id_seqs, id_map)
 
         return documents_with_scores
 

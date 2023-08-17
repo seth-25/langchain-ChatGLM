@@ -35,8 +35,6 @@ CONNECTION_STRING = MyAnalyticDB.connection_string_from_db_params(
 
 def load_file(filepath, sentence_size=SENTENCE_SIZE, using_zh_title_enhance=ZH_TITLE_ENHANCE, url: str = ""):
     if filepath.lower().endswith(".md"):
-        # loader = UnstructuredFileLoader(filepath, mode="elements")
-        # docs = loader.load()
         docs = my_md_split(filepath, sentence_size=sentence_size)
     elif filepath.lower().endswith(".txt"):
         loader = TextLoader(filepath, autodetect_encoding=True)
