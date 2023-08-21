@@ -137,6 +137,13 @@ class MarkdownHeaderTextSplitter:
                         )
                         current_content.clear()
 
+                    lines_with_metadata.append(     # 也加上标题这行
+                        {
+                            "content": line,
+                            "metadata": initial_metadata.copy(),
+                        }
+                    )
+
                     break
             else:   # 遍历完for循环都没匹配上标题，则这行是非标题
                 if stripped_line:   # 这行有内容

@@ -65,7 +65,7 @@ class MyAnalyticDB(VectorStore):
         self.score_threshold = VECTOR_SEARCH_SCORE_THRESHOLD
         self.chunk_content = True
         self.chunk_size = CHUNK_SIZE
-        self.md_title_split = 1 if MD_TITLE_SPLIT < 1 else 6 if MD_TITLE_SPLIT > 6 else MD_TITLE_SPLIT
+        # self.md_title_split = 1 if MD_TITLE_SPLIT < 1 else 6 if MD_TITLE_SPLIT > 6 else MD_TITLE_SPLIT
 
         self.__post_init__(engine_args)
 
@@ -120,6 +120,7 @@ class MyAnalyticDB(VectorStore):
 
     def get_collection_name(self) -> str:
         return self.__collection_name
+
     def check_collection_if_exists(self, collection_name: str) -> bool:
         """ Check if the collection in collections set """
         if collection_name == LANGCHAIN_DEFAULT_COLLECTIONS_NAME:  # 表名不能和collections set相同
@@ -599,20 +600,25 @@ class MyAnalyticDB(VectorStore):
                         continue
                     if t_result.source.lower().endswith(".md"):  # 是markdown
                         is_continue = False
-                        for h in range(self.md_title_split):
+                        # for h in range(self.md_title_split):
+                        #     header = md_headers[h][1]
+                        #     if (header in t_result.metadata.keys() and header in result.metadata.keys()
+                        #             and t_result.metadata[header] != result.metadata[header]):  # 设定等级标题不同，则该方向不再拼
+                        for h in range(len(md_headers) - 1, -1, -1):    # 5 到 0
                             header = md_headers[h][1]
-                            if header in t_result.metadata.keys() and header in result.metadata.keys():
-                                if t_result.metadata[header] != result.metadata[header]:  # 标题不同则该方向不再拼
-                                    if is_left:
-                                        i = sys.maxsize
-                                    else:
-                                        j = sys.maxsize
-                                    is_continue = True
-                                    break
-                        if is_continue:
+                            if (header in t_result.metadata.keys() and header in result.metadata.keys()
+                                and t_result.metadata[header] != result.metadata[header]) \
+                                    or header in result.metadata.keys() and header not in t_result.metadata.keys():  # 只拼同级且标题相同的
+                                if is_left:
+                                    i = sys.maxsize
+                                else:
+                                    j = sys.maxsize
+                                is_continue = True
+                                break
+                        if is_continue:  # 标题不同，跳过后面拼接部分
                             continue
 
-                    if t_result.id in id_set:  # 重叠部分跳过，防止都召回相近的内容，信息量过少
+                    if t_result.id in id_set:  # 重叠部分跳过，防止都召回相同的内容，信息量过少
                         continue
 
                     # 拼接，将id加入id_set

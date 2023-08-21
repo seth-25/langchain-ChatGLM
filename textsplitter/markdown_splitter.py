@@ -21,8 +21,8 @@ md_headers = [
     ("######", "Header 6"),
 ]
 
-md_url_placeholder = "URL_TEXT"
-md_code_placeholder = "CODE_TEXT"
+md_url_placeholder = "URL_P"
+md_code_placeholder = "CODE_P"
 
 
 def _split_text_by_code_blocks(text, code_pattern):
@@ -77,6 +77,49 @@ class MyRecursiveCharacterTextSplitter(RecursiveCharacterTextSplitter):
             return None
         else:
             return text
+
+    # todo 改成优先合并长度短的
+    def _merge_splits(self, splits: Iterable[str], separator: str) -> List[str]:
+        # We now want to combine these smaller pieces into medium size
+        # chunks to send to the LLM.
+        separator_len = self._length_function(separator)
+
+        docs = []
+        current_doc: List[str] = []
+        total = 0
+        for d in splits:
+            _len = self._length_function(d)
+            if (
+                total + _len + (separator_len if len(current_doc) > 0 else 0)
+                > self._chunk_size
+            ):
+                if total > self._chunk_size:
+                    logger.warning(
+                        f"Created a chunk of size {total}, "
+                        f"which is longer than the specified {self._chunk_size}"
+                    )
+                if len(current_doc) > 0:
+                    doc = self._join_docs(current_doc, separator)
+                    if doc is not None:
+                        docs.append(doc)
+                    # Keep on popping if:
+                    # - we have a larger chunk than in the chunk overlap
+                    # - or if we still have any chunks and the length is long
+                    while total > self._chunk_overlap or (
+                        total + _len + (separator_len if len(current_doc) > 0 else 0)
+                        > self._chunk_size
+                        and total > 0
+                    ):
+                        total -= self._length_function(current_doc[0]) + (
+                            separator_len if len(current_doc) > 1 else 0
+                        )
+                        current_doc = current_doc[1:]
+            current_doc.append(d)
+            total += _len + (separator_len if len(current_doc) > 1 else 0)
+        doc = self._join_docs(current_doc, separator)
+        if doc is not None:
+            docs.append(doc)
+        return docs
 
     def _split_text(self, text: str, separators: List[str]) -> List[str]:
         """Split incoming text and return chunks."""
@@ -155,7 +198,7 @@ class MyMarkdownTextSplitter(MyRecursiveCharacterTextSplitter):
             ",",
             "、",
             " ",
-            r"{URL_TEXT\d}|{CODE_TEXT\d}|.",  # 匹配任何字符，在任意位置均可切分，除了URL_TEXT和CODE_TEXT的占位符
+            rf"{{{md_url_placeholder}\d}}|{{{md_code_placeholder}\d}}|.",  # 匹配任何字符，在任意位置均可切分，除了url和code的占位符
         ]
         super().__init__(separators=separators, **kwargs)
 
@@ -188,15 +231,15 @@ def _md_code_url_replace(page_content: str, url_dict: dict, code_dict: dict):
                 url_blocks.remove(url_block2)
     url_blocks = set(url_blocks)
     for i, url_block in enumerate(url_blocks):
-        print(i, url_block)
-        page_content = page_content.replace(url_block, f'{{URL_TEXT{i}}}')
+        # print(i, url_block)
+        page_content = page_content.replace(url_block, f'{{{md_url_placeholder}{i}}}')
         url_dict[i] = url_block
 
     code_pattern = r"```.*?````*"
     code_blocks = re.findall(code_pattern, page_content, re.DOTALL)
     code_blocks = set(code_blocks)  # 文档可能有重复的code，去重。一般不会出现代码块套代码块
     for i, code_block in enumerate(code_blocks):
-        page_content = page_content.replace(code_block, f'{{CODE_TEXT{i}}}')
+        page_content = page_content.replace(code_block, f'{{{md_code_placeholder}{i}}}')
         code_dict[i] = code_block
     return page_content
 

@@ -95,7 +95,7 @@ def parse_code(text):
 
 
 def markdown_to_html(md_text):
-    return markdown.markdown(md_text, extensions=['tables'])
+    return markdown.markdown(md_text, extensions=['tables', 'fenced_code'])
 
 
 def get_answer(query, keyword, knowledge_name, chatbot, history, mode, score_threshold=VECTOR_SEARCH_SCORE_THRESHOLD,
@@ -141,7 +141,6 @@ def get_answer(query, keyword, knowledge_name, chatbot, history, mode, score_thr
                 else:
                     source += f"""<details> <summary>【出处{i + 1}】：{os.path.split(doc.metadata["source"])[-1]} &nbsp;&nbsp;&nbsp; 【距离】：{doc.metadata['score']}</summary>"""
                 if os.path.split(doc.metadata["source"])[-1].lower().endswith(".md"):  # 是markdown
-                    # doc_page_content = parse_code(doc.metadata["content"])  # 除了代码以外的加两个回车，便于markdown_to_html识别
                     doc_page_content = doc.metadata["content"]
                     source += f"""{markdown_to_html(doc_page_content)}"""
                     # print("================")
@@ -154,6 +153,17 @@ def get_answer(query, keyword, knowledge_name, chatbot, history, mode, score_thr
                     doc_page_content = parse_text(doc.metadata["content"])
                     source += f"""{doc_page_content}"""
                 source += f"""</details>"""
+
+            # for i, doc in enumerate(resp["source_documents"]):
+            #     if os.path.split(doc.metadata["source"])[-1].lower().endswith(".md"):  # 是markdown
+            #         doc_page_content = doc.metadata["content"]
+            #         source += markdown_to_html(doc_page_content)
+            #         print("-----------------")
+            #         print(markdown_to_html(doc_page_content))
+            #         print("``````````````````")
+            #     else:
+            #         doc_page_content = parse_text(doc.metadata["content"])
+            #         source += doc_page_content
 
             chatbot[-2] = history[-1]
             chatbot[-1] = [None, source]

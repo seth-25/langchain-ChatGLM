@@ -382,8 +382,8 @@ CHINESE_TEXT_SPLITTER_MERGE_SPLIT = False
 
 MD_TITLE_ENHANCE = True  # 将markdown标题和文本融合
 MD_TITLE_ENHANCE_ADD_FILENAME = False  # 是否将文件名也加入markdown标题
-REMOVE_TITLE = False  # 向模型输入提问时，移除拼接文本重复的markdown标题，在开启上下文功能，且开启MD_TITLE_ENHANCE或ZH_TITLE_ENHANCE时才有效
-MD_TITLE_SPLIT = 1  # 上下文拼接时，几级标题不同就不再拼接，值为1～6
+REMOVE_TITLE = False  # 向模型输入提问时，移除拼接文本重复的标题，在开启上下文拼接功能，且开启MD_TITLE_ENHANCE或ZH_TITLE_ENHANCE时才有效
+# MD_TITLE_SPLIT = 1  # 上下文拼接时，几级标题不同就不再拼接，值为1～6
 MD_REPLACE_CODE_AND_URL = True  # 切分前将code和url写入metatdata，并在原文中用占位符代替，避免被切分。回答时再将占位符换回来。
 
 

@@ -1,7 +1,7 @@
 from configs.model_config import *
 from utils.regular_util import add_enter_after_brackets, match_brackets_at_start, remove_brackets_at_start
 from langchain.docstore.document import Document
-
+from textsplitter.markdown_splitter import md_url_placeholder, md_code_placeholder
 
 def merge_ids(id_set):
     """ 连续的id分在一起，成为一个id seq """
@@ -25,11 +25,11 @@ def md_write_code_url_in_content(result) -> str:
     code_num_list = result.metadata["CODE_NUM"]
     result_document = result.document
     for num in code_num_list:
-        result_document = result_document.replace(f'{{CODE_TEXT{num}}}', result.metadata[f'{{CODE_TEXT{num}}}'])
+        result_document = result_document.replace(f'{{{md_code_placeholder}{num}}}', result.metadata[f'{{{md_code_placeholder}{num}}}'])
 
     url_num_list = result.metadata["URL_NUM"]
     for num in url_num_list:
-        result_document = result_document.replace(f'{{URL_TEXT{num}}}', result.metadata[f'{{URL_TEXT{num}}}'])
+        result_document = result_document.replace(f'{{{md_url_placeholder}{num}}}', result.metadata[f'{{{md_url_placeholder}{num}}}'])
     return result_document
 
 
