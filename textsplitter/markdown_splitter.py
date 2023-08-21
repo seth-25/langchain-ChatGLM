@@ -6,7 +6,7 @@ from typing import List, Any, Optional, Iterable
 from .markdown_header_splitter import MarkdownHeaderTextSplitter
 
 from configs.model_config import *
-from utils.file_util import get_filename_from_source
+from utils.file_util import get_filename_from_source, get_filename_no_suffix_from_source
 
 """
 对url和代码段进行替换的为占位符，url和代码段的内容写入metadata里，不会进入embedding
@@ -212,7 +212,7 @@ def _md_title_enhance(docs: List[Document], filepath) -> List[Document]:
                     # print(key, value)
                     title_list.append(value)
             if MD_TITLE_ENHANCE_ADD_FILENAME:
-                filename = get_filename_from_source(filepath)
+                filename = get_filename_no_suffix_from_source(filepath)
                 doc.page_content = f"【下文与({filename},{','.join(title_list)})有关】{doc.page_content}"
             else:
                 doc.page_content = f"【下文与({','.join(title_list)})有关】{doc.page_content}"
