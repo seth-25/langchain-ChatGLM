@@ -311,6 +311,25 @@ class LocalDocQA:
         vector_store = self.load_vector_store(knowledge_name)
         return vector_store.delete_collection()
 
+    def update_url_from_urlfile(self, knowledge_name, filepath):
+        print(f"更新URL文件至 {knowledge_name} ")
+
+        filelist = self.list_file_from_vector_store(knowledge_name)
+        vector_store = self.load_vector_store(knowledge_name)
+        print(filelist)
+        with open(filepath) as f:
+            text = f.read()
+        for line in text.split("\n"):
+            line = line.split("\t")
+            filename = line[0]
+            url = line[-1]
+            if len(filename) == 0 or len(url) == 0:
+                raise Exception("文件格式错误")
+            if filename in filelist:
+                vector_store.update_url(filename, url)
+            else:
+                logger.warn(f"文件 {filename} 不在数据库中")
+
     ####################################################################################################
     # 下面是不需要设定collection_name，直接在langchain_collections表上进行的操作
     def create_knowledge_vector_store(self, knowledge_name: str or os.PathLike = None):

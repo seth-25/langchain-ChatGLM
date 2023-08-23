@@ -5,7 +5,7 @@ import sys
 from langchain.vectorstores.analyticdb import Base
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple, Type
 from sqlalchemy import Column, String, Table, create_engine, insert, text, select, Integer, func, and_
-from sqlalchemy.dialects.postgresql import ARRAY, JSON, TEXT, REAL
+from sqlalchemy.dialects.postgresql import ARRAY, JSON, TEXT, REAL, JSONB
 
 from langchain.docstore.document import Document
 from langchain.embeddings.base import Embeddings
@@ -149,8 +149,9 @@ class MyAnalyticDB(VectorStore):
             Column("uid", TEXT, default=uuid.uuid4),
             Column("embedding", ARRAY(REAL)),
             Column("document", String, nullable=True),
-            Column("metadata", JSON, nullable=True),
-            Column("source", TEXT, nullable=True),  # 存的是filename
+            Column("metadata", JSONB, nullable=True),
+            Column("filename", TEXT, nullable=True),  # 存的是filename
+            Column("url", TEXT, nullable=True),
             extend_existing=True,
         )
         table_is_exist = True
@@ -261,6 +262,15 @@ class MyAnalyticDB(VectorStore):
             raise Exception(f"{LANGCHAIN_DEFAULT_COLLECTIONS_NAME}表内数据错误，不存在{collection_name}")
         return result
 
+    def update_url(self, filename, url) -> None:
+        with self.engine.connect() as conn:
+            with conn.begin():
+                print(url)
+                update_metadata = self.__collection_table.update().values(
+                    url=url).where(self.__collection_table.c.filename == filename)
+                conn.execute(update_metadata)
+
+
     def delete(self, ids: Optional[List[str]] = None, **kwargs: Any) -> Optional[bool]:
         """Delete by vector IDs.
         Args:
@@ -290,13 +300,13 @@ class MyAnalyticDB(VectorStore):
             with self.engine.connect() as conn:
                 with conn.begin():
                     if isinstance(source, str):
-                        select_condition = self.__collection_table.c.source == get_filename_from_source(source)
+                        select_condition = self.__collection_table.c.filename == get_filename_from_source(source)
                         # select_condition = self.collection_table.c.metadata.op("->>")("source") == source
                         s = select(self.__collection_table.c.id).where(select_condition)
                         results = conn.execute(s).fetchall()
                     else:
                         for src in source:
-                            select_condition = self.__collection_table.c.source == get_filename_from_source(src)
+                            select_condition = self.__collection_table.c.filename == get_filename_from_source(src)
                             # select_condition = self.collection_table.c.metadata.op("->>")("source") == src
                             s = select(self.__collection_table.c.id).where(select_condition)
                             results.extend(conn.execute(s).fetchall())
@@ -328,7 +338,7 @@ class MyAnalyticDB(VectorStore):
             raise Exception("尚未绑定知识库")
         with self.engine.connect() as conn:
             with conn.begin():
-                s = select(self.__collection_table.c.source).group_by(self.__collection_table.c.source)
+                s = select(self.__collection_table.c.filename).group_by(self.__collection_table.c.filename)
                 results = conn.execute(s).fetchall()
         return list(result[0] for result in results)
 
@@ -365,15 +375,16 @@ class MyAnalyticDB(VectorStore):
                 for document, metadata, chunk_id, embedding, filename in zip(
                         texts, metadatas, ids, embeddings, filenames
                 ):
-                    chunks_table_data.append(
-                        {
-                            "uid": chunk_id,
-                            "embedding": embedding,
-                            "document": document,
-                            "metadata": metadata,
-                            "source": filename,
-                        }
-                    )
+                    chunk_table_data = {
+                        "uid": chunk_id,
+                        "embedding": embedding,
+                        "document": document,
+                        "metadata": metadata,
+                        "filename": filename,
+                    }
+                    if "url" in metadata.keys():
+                        chunk_table_data["url"] = metadata["url"]
+                    chunks_table_data.append(chunk_table_data)
 
                     # Execute the batch insert when the batch size is reached
                     if len(chunks_table_data) == batch_size:
@@ -478,6 +489,8 @@ class MyAnalyticDB(VectorStore):
                 continue
             result.metadata["score"] = round(result.distance, 3) if self.embedding_function is not None else None
             result.metadata["content"] = result.document
+            if result.url:
+                result.metadata["url"] = result.url
             documents_with_scores.append((
                 Document(
                     page_content=result.document,
@@ -541,8 +554,7 @@ class MyAnalyticDB(VectorStore):
                 with self.engine.connect() as conn:  # 查询出上下文
                     with conn.begin():
                         dis_condition = text(f"l2_distance(embedding, :embedding) as distance")
-                        file_source_condition = self.__collection_table.c.metadata.op("->>")("source") == \
-                                                result.metadata["source"]
+                        file_source_condition = self.__collection_table.c.filename == get_filename_from_source(result.metadata["source"])
 
                         min_id_condition = self.__collection_table.c.id >= left_range[0]
                         max_id_condition = self.__collection_table.c.id <= left_range[1]
@@ -592,13 +604,13 @@ class MyAnalyticDB(VectorStore):
 
                     # 拼上该方向的文本超长度了，或不是同个文件，这个方向不再拼
                     if docs_len + len(t_result.document) > self.chunk_size or \
-                            t_result.source != result.source:
+                            t_result.filename != result.filename:
                         if is_left:
                             i = sys.maxsize
                         else:
                             j = sys.maxsize
                         continue
-                    if t_result.source.lower().endswith(".md"):  # 是markdown
+                    if t_result.filename.lower().endswith(".md"):  # 是markdown
                         is_continue = False
                         # for h in range(self.md_title_split):
                         #     header = md_headers[h][1]
@@ -639,7 +651,7 @@ class MyAnalyticDB(VectorStore):
             return []
 
         id_seqs = merge_ids(id_set)  # 连续的id分在一起，成为一个id seq
-        documents_with_scores = generate_doc_with_score(id_seqs, id_map)
+        documents_with_scores = generate_doc_with_score(id_seqs, id_map)    # 根据id生成文本
 
         return documents_with_scores
 

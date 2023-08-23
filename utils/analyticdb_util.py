@@ -50,11 +50,13 @@ def generate_doc_with_score(id_seqs, id_map) -> list:
                     metadata=result.metadata,
                 )
                 # metadata["content"]是在前端显示的内容，在标题后加回车，方便在webui显示
-                if result.source.lower().endswith(".md"):
+                if result.filename.lower().endswith(".md"):
                     doc.metadata["content"] = add_enter_after_brackets(doc.page_content, markdown=True)
                 else:
                     doc.metadata["content"] = add_enter_after_brackets(doc.page_content, markdown=False)
                 doc_score = result.distance
+                if result.url:
+                    doc.metadata["url"] = result.url
             else:
                 result = id_map[id]
                 result_document = result.document
@@ -68,7 +70,7 @@ def generate_doc_with_score(id_seqs, id_map) -> list:
                 if match_brackets_at_start(last_res.document) == match_brackets_at_start(result_document):
                     remove_brackets_page_content = remove_brackets_at_start(result_document)
 
-                if result.source.lower().endswith(".md"):  # 是markdown，文本切分自带换行，添加的上下文不需要换行
+                if result.filename.lower().endswith(".md"):  # 是markdown，文本切分自带换行，添加的上下文不需要换行
                     if REMOVE_TITLE:  # 有时候大模型会把标题也混入答案中。可选择去掉相同标题，但文本太长回答可能不全，模型无法理解哪些与标题有关
                         doc.page_content += remove_brackets_page_content
                     else:
