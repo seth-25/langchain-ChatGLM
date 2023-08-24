@@ -154,17 +154,6 @@ def get_answer(query, keyword, knowledge_name, chatbot, history, mode, score_thr
                     source += f"""{doc_page_content}"""
                 source += f"""</details>"""
 
-            # for i, doc in enumerate(resp["source_documents"]):
-            #     if os.path.split(doc.metadata["source"])[-1].lower().endswith(".md"):  # 是markdown
-            #         doc_page_content = doc.metadata["content"]
-            #         source += markdown_to_html(doc_page_content)
-            #         print("-----------------")
-            #         print(markdown_to_html(doc_page_content))
-            #         print("``````````````````")
-            #     else:
-            #         doc_page_content = parse_text(doc.metadata["content"])
-            #         source += doc_page_content
-
             chatbot[-2] = history[-1]
             chatbot[-1] = [None, source]
 
@@ -261,6 +250,8 @@ def get_vector_store(knowledge_name, files, sentence_size, chatbot, url=""):
             files = [files]
         file_path_list = []
         for file in files:
+            if not file:
+                continue
             filename = os.path.split(file.name)[-1]  # file.name是路径
             if filename in knowledge_files:  # 文件已在知识库存在
                 continue

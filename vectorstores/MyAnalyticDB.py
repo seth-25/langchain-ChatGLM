@@ -134,7 +134,7 @@ class MyAnalyticDB(VectorStore):
         else:
             return False
 
-    def create_table_if_not_exists(self, collection_name: str = None) -> [Table, bool]:
+    def create_table_if_not_exists(self, collection_name: Optional[str] = None) -> [Table, bool]:
         """ 返回创建的Table对象和bool类型的table_is_exist，table_is_exist用于判断创建的表是否存在 """
         if collection_name is None:
             collection_name = self.__collection_name
