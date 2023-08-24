@@ -27,6 +27,7 @@ class SupportedVSType:
     MILVUS = 'milvus'
     DEFAULT = 'default'
     PG = 'pg'
+    ADB = 'adb'
 
 
 class KBService(ABC):
@@ -157,6 +158,7 @@ class KBService(ABC):
     def do_search(self,
                   query: str,
                   top_k: int,
+                  score_threshold: float,
                   embeddings: Embeddings,
                   ) -> List[Document]:
         """
@@ -168,6 +170,7 @@ class KBService(ABC):
     def do_add_doc(self,
                    docs: List[Document],
                    embeddings: Embeddings,
+                   **kwargs,
                    ):
         """
         向知识库添加文档子类实自己逻辑
@@ -176,7 +179,9 @@ class KBService(ABC):
 
     @abstractmethod
     def do_delete_doc(self,
-                      kb_file: KnowledgeFile):
+                      kb_file: KnowledgeFile,
+                      **kwargs,
+                      ):
         """
         从知识库删除文档子类实自己逻辑
         """
@@ -208,6 +213,9 @@ class KBServiceFactory:
         elif SupportedVSType.MILVUS == vector_store_type:
             from server.knowledge_base.kb_service.milvus_kb_service import MilvusKBService
             return MilvusKBService(kb_name, embed_model=embed_model) # other milvus parameters are set in model_config.kbs_config
+        elif SupportedVSType.ADB == vector_store_type:
+            from server.knowledge_base.kb_service.analyticdb_kb_service import ADBKBService
+            return ADBKBService(kb_name, embed_model=embed_model)
         elif SupportedVSType.DEFAULT == vector_store_type: # kb_exists of default kbservice is False, to make validation easier.
             from server.knowledge_base.kb_service.default_kb_service import DefaultKBService
             return DefaultKBService(kb_name)

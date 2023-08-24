@@ -243,8 +243,8 @@ def run_webui(q: Queue, run_seq: int = 5):
         else:
             break
     q.put(run_seq)
-    p = subprocess.Popen(["streamlit", "run", "webui.py",
-                          "--server.address", host,
+    p = subprocess.Popen(["streamlit", "run", "webui.py",   # 此处可能需要配一下streamlit的环境变量
+                          # "--server.address", host,
                           "--server.port", str(port)])
     p.wait()
 
