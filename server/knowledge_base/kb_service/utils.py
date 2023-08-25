@@ -2,14 +2,15 @@ from configs.model_config import *
 from langchain.docstore.document import Document
 from text_splitter.markdown_splitter import md_url_placeholder, md_code_placeholder
 
-
 import re
+
 
 def get_filename_from_source(file_source) -> str:
     """
     从文件路径名称中获取文件名
     """
     return os.path.split(file_source)[-1]
+
 
 def match_brackets_at_start(text):
     pattern = r'^【.*?】'  # 正则表达式匹配以【】开头的部分
@@ -52,18 +53,19 @@ def merge_ids(id_set):
     return id_seqs
 
 
-
 def md_write_code_url_in_content(result) -> str:
     if "CODE_NUM" not in result.metadata.keys() or "URL_NUM" not in result.metadata.keys():  # 兼容之前没对url和code处理的向量
         return result.document
     code_num_list = result.metadata["CODE_NUM"]
     result_document = result.document
     for num in code_num_list:
-        result_document = result_document.replace(f'{{{md_code_placeholder}{num}}}', result.metadata[f'{{{md_code_placeholder}{num}}}'])
+        result_document = result_document.replace(f'{{{md_code_placeholder}{num}}}',
+                                                  result.metadata[f'{{{md_code_placeholder}{num}}}'])
 
     url_num_list = result.metadata["URL_NUM"]
     for num in url_num_list:
-        result_document = result_document.replace(f'{{{md_url_placeholder}{num}}}', result.metadata[f'{{{md_url_placeholder}{num}}}'])
+        result_document = result_document.replace(f'{{{md_url_placeholder}{num}}}',
+                                                  result.metadata[f'{{{md_url_placeholder}{num}}}'])
     return result_document
 
 

@@ -52,14 +52,14 @@ def dialogue_page(api: ApiRequest):
             # sac.alert(text, description="descp", type="success", closable=True, banner=True)
 
         dialogue_mode = st.selectbox("请选择对话模式",
-                                     ["LLM 对话",
-                                      "知识库问答",
+                                     ["知识库问答",
+                                      "LLM 对话",
                                       "搜索引擎问答",
                                       ],
                                      on_change=on_mode_change,
                                      key="dialogue_mode",
                                      )
-        history_len = st.number_input("历史对话轮数：", 0, 10, 3)
+        history_len = st.number_input("历史对话轮数：", 0, 10, 0)
 
         # todo: support history len
 
@@ -108,16 +108,24 @@ def dialogue_page(api: ApiRequest):
             history = get_messages_history(history_len)
             chat_box.ai_say([
                 f"正在查询知识库 `{selected_kb}` ...",
-                Markdown("...", in_expander=True, title="知识库匹配结果"),
             ])
             text = ""
+            documents = []
+            sources = []
             for d in api.knowledge_base_chat(prompt, selected_kb, kb_top_k, score_threshold, history):
                 if error_msg := check_error_msg(d): # check whether error occured
                     st.error(error_msg)
                 text += d["answer"]
                 chat_box.update_msg(text, 0)
-                chat_box.update_msg("\n\n".join(d["docs"]), 1, streaming=False)
+                documents = d["docs"]
+                sources = d["sources"]
             chat_box.update_msg(text, 0, streaming=False)
+            source_ui = []
+            for s in sources:
+                source_ui.append(Markdown("...", in_expander=True, title=s))
+            chat_box.ai_say(source_ui)
+            for i, d in enumerate(documents):
+                chat_box.update_msg(d, i, streaming=False)
         elif dialogue_mode == "搜索引擎问答":
             chat_box.ai_say([
                 f"正在执行 `{search_engine}` 搜索...",

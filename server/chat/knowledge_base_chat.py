@@ -1,5 +1,7 @@
 from fastapi import Body, Request
 from fastapi.responses import StreamingResponse
+
+from configs import API_SERVER, DOC_SOURCE_USE_EXTERNAL_IP
 from configs.model_config import (llm_model_dict, LLM_MODEL, PROMPT_TEMPLATE,
                                   VECTOR_SEARCH_TOP_K, SCORE_THRESHOLD)
 from server.chat.utils import wrap_done
@@ -56,7 +58,6 @@ def knowledge_base_chat(query: str = Body(..., description="用户输入", examp
         )
         docs = search_docs(query, knowledge_base_name, top_k, score_threshold)
         context = "\n".join([doc.page_content for doc in docs])
-
         chat_prompt = ChatPromptTemplate.from_messages(
             [i.to_msg_tuple() for i in history] + [("human", PROMPT_TEMPLATE)])
 
@@ -68,29 +69,44 @@ def knowledge_base_chat(query: str = Body(..., description="用户输入", examp
             callback.done),
         )
 
-        source_documents = []
+        documents = []
+        sources = []
+
+        if DOC_SOURCE_USE_EXTERNAL_IP:
+            from urllib.request import urlopen
+            from json import load
+            external_ip = load(urlopen('https://api.ipify.org/?format=json'))['ip']
         for inum, doc in enumerate(docs):
             filename = os.path.split(doc.metadata["source"])[-1]
             if local_doc_url:
                 url = "file://" + doc.metadata["source"]
             else:
                 parameters = urlencode({"knowledge_base_name": knowledge_base_name, "file_name":filename})
-                url = f"{request.base_url}knowledge_base/download_doc?" + parameters
-            text = f"""出处 [{inum + 1}] [{filename}]({url}) \n\n{doc.page_content}\n\n"""
-            source_documents.append(text)
+                if DOC_SOURCE_USE_EXTERNAL_IP:
+                    url = f" http://{external_ip}:{API_SERVER.get('port')}/knowledge_base/download_doc?" + parameters
+                else:
+                    url = f"{request.base_url}knowledge_base/download_doc?" + parameters
+            if "url" in doc.metadata.keys():
+                url = doc.metadata["url"]
+            if "content" in doc.metadata.keys():
+                documents.append(doc.metadata["content"])
+            else:
+                documents.append(doc.page_content)
+            sources.append(f"出处 [{inum + 1}] [{filename}]({url})")
 
         if stream:
             async for token in callback.aiter():
                 # Use server-sent-events to stream the response
                 yield json.dumps({"answer": token,
-                                  "docs": source_documents},
+                                  "docs": documents,
+                                  "sources": sources},
                                  ensure_ascii=False)
         else:
             answer = ""
             async for token in callback.aiter():
                 answer += token
             yield json.dumps({"answer": answer,
-                              "docs": source_documents},
+                              "docs": documents},
                              ensure_ascii=False)
 
         await task
