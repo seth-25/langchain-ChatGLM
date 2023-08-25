@@ -102,11 +102,6 @@ if not os.path.exists(LOG_PATH):
 # 知识库默认存储路径
 KB_ROOT_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "knowledge_base")
 
-# 数据库默认存储路径。
-# 如果使用sqlite，可以直接修改DB_ROOT_PATH；如果使用其它数据库，请直接修改SQLALCHEMY_DATABASE_URI。
-DB_ROOT_PATH = os.path.join(KB_ROOT_PATH, "info.db")
-SQLALCHEMY_DATABASE_URI = f"sqlite:///{DB_ROOT_PATH}"
-
 # 可选向量库类型及对应配置
 kbs_config = {
     "faiss": {
@@ -130,6 +125,17 @@ kbs_config = {
         "PG_PASSWORD": "postgres"
     }
 }
+
+# 数据库默认存储路径。
+# 如果使用sqlite，可以直接修改DB_ROOT_PATH；如果使用其它数据库，请直接修改SQLALCHEMY_DATABASE_URI。
+# DB_ROOT_PATH = os.path.join(KB_ROOT_PATH, "info.db")
+# SQLALCHEMY_DATABASE_URI = f"sqlite:///{DB_ROOT_PATH}"
+SQLALCHEMY_DATABASE_URI = f"""postgresql+{kbs_config.get("adb").get("PG_DRIVER")}://\
+{kbs_config.get("adb").get("PG_USER")}:\
+{kbs_config.get("adb").get("PG_PASSWORD")}@\
+{kbs_config.get("adb").get("PG_HOST")}:\
+{kbs_config.get("adb").get("PG_PORT")}/\
+{kbs_config.get("adb").get("PG_DATABASE")}"""
 
 # 默认向量库类型。可选：faiss, milvus, pg.
 DEFAULT_VS_TYPE = "faiss"

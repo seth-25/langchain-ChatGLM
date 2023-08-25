@@ -52,6 +52,7 @@ async def delete_kb(
         return BaseResponse(code=404, msg=f"未找到知识库 {knowledge_base_name}")
 
     try:
+        print("删除知识库接口")
         status = kb.clear_vs()
         status = kb.drop_kb()
         if status:

@@ -1,3 +1,4 @@
+import shutil
 from abc import ABC, abstractmethod
 
 import os
@@ -14,7 +15,7 @@ from server.db.repository.knowledge_file_repository import (
 )
 
 from configs.model_config import (kbs_config, VECTOR_SEARCH_TOP_K, SCORE_THRESHOLD,
-                                  EMBEDDING_DEVICE, EMBEDDING_MODEL)
+                                  EMBEDDING_DEVICE, EMBEDDING_MODEL, DEFAULT_VS_TYPE)
 from server.knowledge_base.utils import (
     get_kb_path, get_doc_path, load_embeddings, KnowledgeFile,
     list_kbs_from_folder, list_docs_from_folder,
@@ -63,12 +64,12 @@ class KBService(ABC):
         status = delete_files_from_db(self.kb_name)
         return status
 
-
     def drop_kb(self):
         """
         删除知识库
         """
         self.do_drop_kb()
+        shutil.rmtree(self.kb_path)
         status = delete_kb_from_db(self.kb_name)
         return status
 
@@ -103,7 +104,7 @@ class KBService(ABC):
         if os.path.exists(kb_file.filepath):
             self.delete_doc(kb_file, **kwargs)
             return self.add_doc(kb_file, **kwargs)
-        
+
     def exist_doc(self, file_name: str):
         return doc_exists(KnowledgeFile(knowledge_base_name=self.kb_name,
                                         filename=file_name))
@@ -202,6 +203,7 @@ class KBServiceFactory:
                     vector_store_type: Union[str, SupportedVSType],
                     embed_model: str = EMBEDDING_MODEL,
                     ) -> KBService:
+        print("加载向量数据库，类型", vector_store_type)
         if isinstance(vector_store_type, str):
             vector_store_type = getattr(SupportedVSType, vector_store_type.upper())
         if SupportedVSType.FAISS == vector_store_type:
@@ -212,11 +214,11 @@ class KBServiceFactory:
             return PGKBService(kb_name, embed_model=embed_model)
         elif SupportedVSType.MILVUS == vector_store_type:
             from server.knowledge_base.kb_service.milvus_kb_service import MilvusKBService
-            return MilvusKBService(kb_name, embed_model=embed_model) # other milvus parameters are set in model_config.kbs_config
+            return MilvusKBService(kb_name, embed_model=embed_model)  # other milvus parameters are set in model_config.kbs_config
         elif SupportedVSType.ADB == vector_store_type:
             from server.knowledge_base.kb_service.analyticdb_kb_service import ADBKBService
             return ADBKBService(kb_name, embed_model=embed_model)
-        elif SupportedVSType.DEFAULT == vector_store_type: # kb_exists of default kbservice is False, to make validation easier.
+        elif SupportedVSType.DEFAULT == vector_store_type:  # kb_exists of default kbservice is False, to make validation easier.
             from server.knowledge_base.kb_service.default_kb_service import DefaultKBService
             return DefaultKBService(kb_name)
 
@@ -224,8 +226,8 @@ class KBServiceFactory:
     def get_service_by_name(kb_name: str
                             ) -> KBService:
         _, vs_type, embed_model = load_kb_from_db(kb_name)
-        if vs_type is None and os.path.isdir(get_kb_path(kb_name)): # faiss knowledge base not in db
-            vs_type = "faiss"
+        if vs_type is None and os.path.isdir(get_kb_path(kb_name)):  # faiss knowledge base not in db
+            vs_type = DEFAULT_VS_TYPE
         return KBServiceFactory.get_service(kb_name, vs_type, embed_model)
 
     @staticmethod
@@ -263,7 +265,7 @@ def get_kb_details() -> List[Dict]:
     for i, v in enumerate(result.values()):
         v['No'] = i + 1
         data.append(v)
-   
+
     return data
 
 
@@ -299,5 +301,5 @@ def get_kb_doc_details(kb_name: str) -> List[Dict]:
     for i, v in enumerate(result.values()):
         v['No'] = i + 1
         data.append(v)
-   
+
     return data

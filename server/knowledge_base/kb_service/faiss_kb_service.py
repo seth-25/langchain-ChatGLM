@@ -95,7 +95,6 @@ class FaissKBService(KBService):
 
     def do_drop_kb(self):
         self.clear_vs()
-        shutil.rmtree(self.kb_path)
 
     def do_search(self,
                   query: str,

@@ -63,13 +63,13 @@ class AnalyticDB(VectorStore):
         self.logger = logger or logging.getLogger(__name__)
 
         self.__collection_name = None
-        self.__collections_set = None
+        self.__collections_set = None  # todo 外部接口暂时使用langchain-chatchat提供的knowledge_base_repository
         self.__collection_table = None
         self.__base = Base
 
         self.score_threshold = SCORE_THRESHOLD  # todo 支持0～1的threshold
         self.chunk_content = True
-        self.chunk_size = CHUNK_SIZE
+        self.chunk_size = CONTENT_SIZE
 
         self.__post_init__(engine_args)
 
@@ -121,6 +121,9 @@ class AnalyticDB(VectorStore):
                 # Create the table
                 collections_table.create(conn, checkfirst=True)
         return collections_table
+
+    def set_embedding(self, embedding_function: Embeddings):
+        self.embedding_function = embedding_function
 
     def get_collection_name(self) -> str:
         return self.__collection_name
@@ -418,16 +421,21 @@ class AnalyticDB(VectorStore):
         )
 
     def similarity_search_with_score(
-        self,
-        query: str,
-        k: int = 4,
-        filter: Optional[dict] = None,
+            self,
+            query: str,
+            k: int = 4,
+            filter: Optional[dict] = None,
     ) -> List[Tuple[Document, float]]:
         embedding = self.embedding_function.embed_query(query)
-        docs = self.similarity_search_with_score_by_vector(
-            embedding=embedding, k=k, filter=filter
-        )
-        return docs
+        if self.chunk_content:  # 使用上下文
+            docs_with_scores = self.my_similarity_search_with_score_by_vector_context(
+                embedding=embedding, k=k, filter=filter
+            )
+        else:
+            docs_with_scores = self.similarity_search_with_score_by_vector(
+                embedding=embedding, k=k, filter=filter
+            )
+        return docs_with_scores
 
     def get_search_result_from_database(self,
                                         embedding: List[float],

@@ -1,15 +1,20 @@
 import os
+
+from langchain.document_loaders import TextLoader
 from langchain.embeddings.huggingface import HuggingFaceEmbeddings
 from configs.model_config import (
     embedding_model_dict,
     KB_ROOT_PATH,
     CHUNK_SIZE,
     OVERLAP_SIZE,
-    ZH_TITLE_ENHANCE
+    ZH_TITLE_ENHANCE, MD_REPLACE_CODE_AND_URL, MD_TITLE_ENHANCE
 )
 from functools import lru_cache
 import importlib
 from text_splitter import zh_title_enhance
+from text_splitter.markdown_header_splitter import MarkdownHeaderTextSplitter
+from text_splitter.markdown_splitter import md_headers, MyMarkdownTextSplitter, _md_title_enhance, \
+    _md_write_code_url_in_metadata, _md_code_url_replace
 
 
 def validate_kb_name(knowledge_base_id: str) -> bool:
@@ -18,26 +23,33 @@ def validate_kb_name(knowledge_base_id: str) -> bool:
         return False
     return True
 
+
 def get_kb_path(knowledge_base_name: str):
     return os.path.join(KB_ROOT_PATH, knowledge_base_name)
+
 
 def get_doc_path(knowledge_base_name: str):
     return os.path.join(get_kb_path(knowledge_base_name), "content")
 
+
 def get_vs_path(knowledge_base_name: str):
     return os.path.join(get_kb_path(knowledge_base_name), "vector_store")
 
+
 def get_file_path(knowledge_base_name: str, doc_name: str):
     return os.path.join(get_doc_path(knowledge_base_name), doc_name)
+
 
 def list_kbs_from_folder():
     return [f for f in os.listdir(KB_ROOT_PATH)
             if os.path.isdir(os.path.join(KB_ROOT_PATH, f))]
 
+
 def list_docs_from_folder(kb_name: str):
     doc_path = get_doc_path(kb_name)
     return [file for file in os.listdir(doc_path)
             if os.path.isfile(os.path.join(doc_path, file))]
+
 
 @lru_cache(1)
 def load_embeddings(model: str, device: str):
@@ -79,8 +91,50 @@ class KnowledgeFile:
         # TODO: 增加依据文件格式匹配text_splitter
         self.text_splitter_name = None
 
+    def md_file2text(self):
+        # 获取文本
+        loader = TextLoader(self.filepath)
+        markdown_document = loader.load()[0]
+        page_content = markdown_document.page_content
+
+        url_dict = {}
+        code_dict = {}
+        if MD_REPLACE_CODE_AND_URL:
+            # 先将url和code替换成占位符
+            page_content = _md_code_url_replace(page_content, url_dict, code_dict)
+
+        # 每段文本前加如标题
+        if MD_TITLE_ENHANCE:
+            # 按标题拆分，并将标题写入metadata
+            header_splitter = MarkdownHeaderTextSplitter(headers_to_split_on=md_headers, return_each_line=False)
+            docs = header_splitter.split_text(page_content)
+
+            # 按separators递归拆分
+            text_splitter = MyMarkdownTextSplitter(chunk_size=CHUNK_SIZE, chunk_overlap=OVERLAP_SIZE,
+                                                   keep_separator=True)
+            docs = text_splitter.split_documents(docs)
+
+            docs = _md_title_enhance(docs, self.filepath)
+        else:
+            # 按separators递归拆分
+            text_splitter = MyMarkdownTextSplitter(chunk_size=CHUNK_SIZE, chunk_overlap=OVERLAP_SIZE,
+                                                   keep_separator=True)
+            docs = text_splitter.split_documents([markdown_document])
+
+        if MD_REPLACE_CODE_AND_URL:
+            # 根据占位符，将url和code写入metadata
+            _md_write_code_url_in_metadata(docs, url_dict, code_dict)
+
+        for doc in docs:
+            doc.metadata["source"] = self.filepath
+        return docs
+
     def file2text(self, using_zh_title_enhance=ZH_TITLE_ENHANCE):
         print(self.document_loader_name)
+
+        if self.ext == ".md":   # todo 可等后续社区增加自定义切分器再改调用形式，文本粒度的metadata内容可能需要split再写入，无法在load阶段完成
+            return self.md_file2text()
+
         try:
             document_loaders_module = importlib.import_module('langchain.document_loaders')
             DocumentLoader = getattr(document_loaders_module, self.document_loader_name)

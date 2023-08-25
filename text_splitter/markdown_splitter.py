@@ -1,6 +1,6 @@
 import re
 from langchain.document_loaders import TextLoader
-from langchain.text_splitter import MarkdownHeaderTextSplitter, RecursiveCharacterTextSplitter
+from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.docstore.document import Document
 from typing import List, Any, Optional, Iterable
 from .markdown_header_splitter import MarkdownHeaderTextSplitter

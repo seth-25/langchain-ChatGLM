@@ -1,11 +1,11 @@
 import os
-from typing import List
+from typing import List, Optional
 
 from langchain.embeddings.base import Embeddings
 from langchain.schema import Document
 from sqlalchemy import text
 
-from configs.model_config import EMBEDDING_DEVICE, kbs_config
+from configs.model_config import EMBEDDING_DEVICE, kbs_config, EMBEDDING_MODEL
 from server.knowledge_base.kb_service.base import SupportedVSType, KBService
 from server.knowledge_base.utils import load_embeddings, KnowledgeFile
 from urllib.parse import quote_plus
@@ -19,10 +19,11 @@ class ADBKBService(KBService):
     def vs_type(self) -> str:
         return SupportedVSType.ADB
 
-    def _init_adb_vector(self, embedding_device: str = EMBEDDING_DEVICE, embeddings: Embeddings = None):
-        _embeddings = embeddings
-        if _embeddings is None:
-            _embeddings = load_embeddings(self.embed_model, embedding_device)
+    def _init_adb_vector(self, embed_model: str = EMBEDDING_MODEL,
+                         embedding_device: str = EMBEDDING_DEVICE,
+                         embeddings: Optional[Embeddings] = None):
+        if embeddings is None:
+            embeddings = load_embeddings(embed_model, embedding_device)
 
         connection_string = AnalyticDB.connection_string_from_db_params(
             driver=kbs_config.get("adb").get("PG_DRIVER"),
@@ -32,7 +33,7 @@ class ADBKBService(KBService):
             user=kbs_config.get("adb").get("PG_USER"),
             password=quote_plus(kbs_config.get("adb").get("PG_PASSWORD")),
         )
-        self.adb_vector = AnalyticDB(embedding_function=_embeddings,
+        self.adb_vector = AnalyticDB(embedding_function=embeddings,
                                      connection_string=connection_string)
         self.adb_vector.set_collection_name(self.kb_name)
 
@@ -51,12 +52,15 @@ class ADBKBService(KBService):
         self.adb_vector.delete_collection()
 
     def do_search(self, query: str, top_k: int, score_threshold: float, embeddings: Embeddings):
-        # todo 支持判断embeddings   score_threshold
+        # todo 支持score_threshold
+        if embeddings:
+            self.adb_vector.set_embedding(embeddings)
         self._load_vector_store()
         return self.adb_vector.similarity_search_with_score(query, k=top_k)
 
     def do_add_doc(self, docs: List[Document], embeddings: Embeddings, **kwargs):
-        # todo 支持判断embeddings
+        if embeddings:
+            self.adb_vector.set_embedding(embeddings)
         self._load_vector_store()
         self.adb_vector.add_documents(docs)
         torch_gc()

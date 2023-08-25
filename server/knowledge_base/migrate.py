@@ -19,7 +19,7 @@ def reset_tables():
 def folder2db(
     kb_name: str,
     mode: Literal["recreate_vs", "fill_info_only", "update_in_db", "increament"],
-    vs_type: Literal["faiss", "milvus", "pg", "chromadb"] = DEFAULT_VS_TYPE,
+    vs_type: Literal["faiss", "milvus", "pg", "chromadb", "adb"] = DEFAULT_VS_TYPE,
     embed_model: str = EMBEDDING_MODEL,
     callback_before: Callable = None,
     callback_after: Callable = None,
@@ -103,7 +103,7 @@ def folder2db(
 
 
 def recreate_all_vs(
-    vs_type: Literal["faiss", "milvus", "pg", "chromadb"] = DEFAULT_VS_TYPE,
+    vs_type: Literal["faiss", "milvus", "pg", "chromadb", "adb"] = DEFAULT_VS_TYPE,
     embed_mode: str = EMBEDDING_MODEL,
     **kwargs: Any,
 ):
