@@ -25,9 +25,10 @@ except ImportError:
 
 Base = declarative_base()  # type: Any
 
-LANGCHAIN_DEFAULT_EMBEDDING_DIM = 768
-LANGCHAIN_DEFAULT_KNOWLEDGE_NAME = "langchain_document"
-LANGCHAIN_DEFAULT_COLLECTIONS_NAME = "langchain_collections"
+DEFAULT_EMBEDDING_DIM = 768
+DEFAULT_KNOWLEDGE_NAME = "langchain_document"
+DEFAULT_KNOWLEDGE_BASE_TABLE_NAME = "knowledge_base"
+DEFAULT_FILE_TABLE_NAME = "knowledge_file"
 
 
 class AnalyticDB(VectorStore):
@@ -50,7 +51,7 @@ class AnalyticDB(VectorStore):
             self,
             connection_string: str,
             embedding_function: Embeddings,
-            embedding_dimension: int = LANGCHAIN_DEFAULT_EMBEDDING_DIM,
+            embedding_dimension: int = DEFAULT_EMBEDDING_DIM,
             pre_delete_collection: bool = False,
             logger: Optional[logging.Logger] = None,
             engine_args: Optional[dict] = None,
@@ -63,7 +64,6 @@ class AnalyticDB(VectorStore):
         self.logger = logger or logging.getLogger(__name__)
 
         self.__collection_name = None
-        self.__collections_set = None  # todo 外部接口暂时使用langchain-chatchat提供的knowledge_base_repository
         self.__collection_table = None
         self.__base = Base
 
@@ -99,28 +99,9 @@ class AnalyticDB(VectorStore):
     def init_collection(self) -> None:
         if self.pre_delete_collection:
             self.delete_collection()
-        self.__collections_set = self.create_collections_set_if_not_exists()
 
         # 初始化MyAnalyticDB不创建collection的Table和绑定self.collection_table，由用户调用接口create_table创建，或者set_collection_name时创建
         # self.collection_table, table_is_exist = self.create_table_if_not_exists()
-
-    def create_collections_set_if_not_exists(self) -> Table:
-        # Define the dynamic collections set table
-        collections_table = Table(
-            LANGCHAIN_DEFAULT_COLLECTIONS_NAME,
-            self.__base.metadata,
-            Column('id', TEXT, primary_key=True, default=uuid.uuid4),
-            Column('collection_name', TEXT),
-            Column('prompt', String, nullable=True),
-            Column('embedding_model', TEXT, nullable=True),
-            Column('dim', Integer, nullable=True),
-            extend_existing=True,
-        )
-        with self.engine.connect() as conn:
-            with conn.begin():
-                # Create the table
-                collections_table.create(conn, checkfirst=True)
-        return collections_table
 
     def set_embedding(self, embedding_function: Embeddings):
         self.embedding_function = embedding_function
@@ -128,26 +109,14 @@ class AnalyticDB(VectorStore):
     def get_collection_name(self) -> str:
         return self.__collection_name
 
-    def check_collection_if_exists(self, collection_name: str) -> bool:
-        """ Check if the collection in collections set """
-        if collection_name == LANGCHAIN_DEFAULT_COLLECTIONS_NAME:  # 表名不能和collections set相同
-            return True
-        with self.engine.connect() as conn:
-            with conn.begin():
-                collection_query = select(1).where(self.__collections_set.c.collection_name == collection_name)
-                collection_result = conn.execute(collection_query).scalar()
-        if collection_result:
-            return True
-        else:
-            return False
-
     def create_table_if_not_exists(self, collection_name: str = None) -> [Table, bool]:
         """ 返回创建的Table对象和bool类型的table_is_exist，table_is_exist用于判断创建的表是否存在 """
         if collection_name is None:
             collection_name = self.__collection_name
-        if collection_name == LANGCHAIN_DEFAULT_COLLECTIONS_NAME:
-            raise Exception(f"知识库名不能和统计知识库的表名{LANGCHAIN_DEFAULT_COLLECTIONS_NAME}相同")
-
+        if collection_name == DEFAULT_KNOWLEDGE_BASE_TABLE_NAME:
+            raise Exception(f"知识库名不能和统计知识库的表名{DEFAULT_KNOWLEDGE_BASE_TABLE_NAME}相同")
+        if collection_name == DEFAULT_FILE_TABLE_NAME:
+            raise Exception(f"知识库名不能和统计文件的表名{DEFAULT_FILE_TABLE_NAME}相同")
         # Define the dynamic collection embedding table
         collection_table = Table(
             collection_name,
@@ -164,17 +133,11 @@ class AnalyticDB(VectorStore):
         table_is_exist = True
         with self.engine.connect() as conn:
             with conn.begin():
-                if not self.check_collection_if_exists(collection_name):
-                    # Create the table
-                    collection_table.create(conn, checkfirst=True)
+                # Create the table
+                collection_table.create(conn, checkfirst=True)
 
-                    # Add the collection in collections set if it doesn't exist
-                    table_is_exist = False
-                    insert_collection = self.__collections_set.insert().values(collection_name=collection_name,
-                                                                               prompt=PROMPT_TEMPLATE,
-                                                                               embedding_model=EMBEDDING_MODEL,
-                                                                               dim=LANGCHAIN_DEFAULT_EMBEDDING_DIM)
-                    conn.execute(insert_collection)
+                # Add the collection in collections set if it doesn't exist
+                table_is_exist = False
 
                 # Check if the index exists
                 index_name = f"{collection_name}_embedding_idx"
@@ -204,70 +167,22 @@ class AnalyticDB(VectorStore):
         return collection_table, table_is_exist
 
     def delete_collection(self) -> None:
-        if self.__collection_table is None or self.__collections_set is None:
+        if self.__collection_table is None:
             raise Exception("尚未绑定知识库")
         self.logger.debug("Trying to delete knowledge")
 
-        delete_collection_record = self.__collections_set.delete().where(
-            self.__collections_set.c.collection_name == self.__collection_name)
         with self.engine.connect() as conn:
             with conn.begin():
                 self.__collection_table.drop(conn, checkfirst=True)
                 self.__base.metadata.remove(self.__collection_table)
-                conn.execute(delete_collection_record)
                 self.__collection_name = None
                 self.__collection_table = None
-
-    def change_collection(self, new_collection_name) -> None:
-        if self.__collection_table is None or self.__collections_set is None:
-            raise Exception("尚未绑定知识库")
-        alert_statement = text(f"""ALTER TABLE "{self.__collection_name}" RENAME TO "{new_collection_name}";""")
-        alert_index_statement = text(
-            f"""ALTER INDEX "{self.__collection_name}_embedding_idx" RENAME TO "{new_collection_name}_embedding_idx";""")
-        alert_id_seq_statement = text(
-            f"""ALTER TABLE "{self.__collection_name}_id_seq" RENAME TO "{new_collection_name}_id_seq";""")
-        # f"""UPDATE {LANGCHAIN_DEFAULT_COLLECTIONS_NAME} SET collection_name = '{new_collection_name}' WHERE collection_name = '{self.__collection_name}';""")
-        update_collection_record = self.__collections_set.update().where(
-            self.__collections_set.c.collection_name == self.__collection_name).values(
-            collection_name=new_collection_name)
-        with self.engine.connect() as conn:
-            with conn.begin():
-                conn.execute(alert_statement)
-                conn.execute(alert_index_statement)
-                conn.execute(alert_id_seq_statement)
-                conn.execute(update_collection_record)
-
-        self.set_collection_name(new_collection_name)
 
     def set_collection_name(self, collection_name):
         if self.__collection_table is not None:
             self.__base.metadata.remove(self.__collection_table)
         self.__collection_name = collection_name
         self.__collection_table, table_is_exist = self.create_table_if_not_exists()
-
-    def get_collections(self) -> List[str]:
-        collections_query = select(self.__collections_set.c.collection_name)
-        with self.engine.connect() as conn:
-            with conn.begin():
-                result = conn.execute(collections_query).fetchall()
-                return [record.collection_name for record in result]
-
-    def change_prompt(self, collection_name, prompt) -> None:
-        update_collection_prompt = self.__collections_set.update().where(
-            self.__collections_set.c.collection_name == collection_name).values(prompt=prompt)
-        with self.engine.connect() as conn:
-            with conn.begin():
-                conn.execute(update_collection_prompt)
-
-    def get_prompt(self, collection_name: str) -> str:
-        select_collection_prompt = select(self.__collections_set.c.prompt).where(
-            self.__collections_set.c.collection_name == collection_name)
-        with self.engine.connect() as conn:
-            with conn.begin():
-                result = conn.execute(select_collection_prompt).scalar()
-        if result is None:
-            raise Exception(f"{LANGCHAIN_DEFAULT_COLLECTIONS_NAME}表内数据错误，不存在{collection_name}")
-        return result
 
     def update_url(self, filename, url) -> None:
         with self.engine.connect() as conn:
@@ -676,8 +591,8 @@ class AnalyticDB(VectorStore):
             texts: List[str],
             embedding: Embeddings,
             metadatas: Optional[List[dict]] = None,
-            embedding_dimension: int = LANGCHAIN_DEFAULT_EMBEDDING_DIM,
-            collection_name: str = LANGCHAIN_DEFAULT_KNOWLEDGE_NAME,
+            embedding_dimension: int = DEFAULT_EMBEDDING_DIM,
+            collection_name: str = DEFAULT_KNOWLEDGE_NAME,
             ids: Optional[List[str]] = None,
             pre_delete_collection: bool = False,
             engine_args: Optional[dict] = None,
