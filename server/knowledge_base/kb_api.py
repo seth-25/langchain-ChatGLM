@@ -21,9 +21,6 @@ async def create_kb(knowledge_base_name: str = Body(..., examples=["samples"]),
         return BaseResponse(code=403, msg="Don't attack me")
     if knowledge_base_name is None or knowledge_base_name.strip() == "":
         return BaseResponse(code=404, msg="知识库名称不能为空，请重新填写知识库名称")
-
-    print("创建kb", knowledge_base_name, vector_store_type, embed_model)
-
     kb = KBServiceFactory.get_service_by_name(knowledge_base_name)
     if kb is not None:
         return BaseResponse(code=404, msg=f"已存在同名知识库 {knowledge_base_name}")
@@ -52,7 +49,6 @@ async def delete_kb(
         return BaseResponse(code=404, msg=f"未找到知识库 {knowledge_base_name}")
 
     try:
-        print("删除知识库接口")
         status = kb.clear_vs()
         status = kb.drop_kb()
         if status:
