@@ -1,6 +1,6 @@
 import os
 
-from langchain.document_loaders import TextLoader
+from langchain.document_loaders import TextLoader, CSVLoader, UnstructuredFileLoader
 from langchain.embeddings.huggingface import HuggingFaceEmbeddings
 from langchain.embeddings.openai import OpenAIEmbeddings
 from langchain.embeddings import HuggingFaceBgeEmbeddings
@@ -13,7 +13,7 @@ from configs.model_config import (
 )
 from functools import lru_cache
 import importlib
-from text_splitter import zh_title_enhance
+from text_splitter import zh_title_enhance, ChineseTextSplitter
 from text_splitter.markdown_header_splitter import MarkdownHeaderTextSplitter
 from text_splitter.markdown_splitter import md_headers, MyMarkdownTextSplitter, _md_title_enhance, \
     _md_write_code_url_in_metadata, _md_code_url_replace
@@ -68,7 +68,6 @@ def load_embeddings(model: str, device: str):
     return embeddings
 
 
-
 LOADER_DICT = {"UnstructuredFileLoader": ['.eml', '.html', '.json', '.md', '.msg', '.rst',
                                           '.rtf', '.txt', '.xml',
                                           '.doc', '.docx', '.epub', '.odt', '.pdf',
@@ -77,6 +76,7 @@ LOADER_DICT = {"UnstructuredFileLoader": ['.eml', '.html', '.json', '.md', '.msg
                "PyPDFLoader": [".pdf"],
                }
 SUPPORTED_EXTS = [ext for sublist in LOADER_DICT.values() for ext in sublist]
+
 
 def get_LoaderClass(file_extension):
     for LoaderClass, extensions in LOADER_DICT.items():
@@ -143,9 +143,46 @@ class KnowledgeFile:
     def file2text(self, using_zh_title_enhance=ZH_TITLE_ENHANCE):
         print(self.document_loader_name)
 
-        if self.ext == ".md":   # todo 可等后续社区增加自定义切分器再改调用形式，文本粒度的metadata内容可能需要split再写入，无法在load阶段完成
+        # todo 以下是旧版的调用方式，可等后续社区增加自定义切分器再改调用形式，Document粒度的metadata内容可能需要split后再写入，无法在load阶段完成
+        # todo loader文件夹下的内容也是旧版的，如果新版用其他调用loader的形式，可更换后删除loader文件夹
+        if self.ext == ".md":
+            self.text_splitter_name = "MarkdownTextSplitter"
             return self.md_file2text()
+        elif self.ext == ".txt":
+            loader = TextLoader(self.filepath, autodetect_encoding=True)
+            textsplitter = ChineseTextSplitter(pdf=False, sentence_size=CHUNK_SIZE)
+            docs = loader.load_and_split(textsplitter)
+            self.text_splitter_name = "ChineseTextSplitter"
+        elif self.ext == ".pdf":
+            # 暂且将paddle相关的loader改为动态加载，可以在不上传pdf/image知识文件的前提下使用protobuf=4.x
+            from text_splitter.loader import UnstructuredPaddlePDFLoader
+            loader = UnstructuredPaddlePDFLoader(self.filepath)
+            textsplitter = ChineseTextSplitter(pdf=True, sentence_size=CHUNK_SIZE)
+            docs = loader.load_and_split(textsplitter)
+            self.text_splitter_name = "ChineseTextSplitter"
+        elif self.ext == ".jpg" or self.ext == ".png":
+            # 暂且将paddle相关的loader改为动态加载，可以在不上传pdf/image知识文件的前提下使用protobuf=4.x
+            from text_splitter.loader import UnstructuredPaddleImageLoader
+            loader = UnstructuredPaddleImageLoader(self.filepath, mode="elements")
+            textsplitter = ChineseTextSplitter(pdf=False, sentence_size=CHUNK_SIZE)
+            docs = loader.load_and_split(text_splitter=textsplitter)
+            self.text_splitter_name = "ChineseTextSplitter"
+        elif self.ext == ".csv":
+            loader = CSVLoader(self.filepath, encoding='gb18030')
+            docs = loader.load()
+        else:
+            loader = UnstructuredFileLoader(self.filepath, mode="elements")
+            textsplitter = ChineseTextSplitter(pdf=False, sentence_size=CHUNK_SIZE)
+            docs = loader.load_and_split(text_splitter=textsplitter)
+            self.text_splitter_name = "ChineseTextSplitter"
+        if using_zh_title_enhance:
+            docs = zh_title_enhance(docs)
+        return docs
 
+
+    """以下是社区版的调用方式"""
+    def file2text_bak(self, using_zh_title_enhance=ZH_TITLE_ENHANCE):
+        print(self.document_loader_name)
         try:
             document_loaders_module = importlib.import_module('langchain.document_loaders')
             DocumentLoader = getattr(document_loaders_module, self.document_loader_name)

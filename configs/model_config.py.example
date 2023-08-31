@@ -128,7 +128,7 @@ SQLALCHEMY_DATABASE_URI = f"""postgresql+{kbs_config.get("adb").get("PG_DRIVER")
 {kbs_config.get("adb").get("PG_DATABASE")}"""
 
 # 默认向量库类型。可选：faiss, milvus, pg.
-DEFAULT_VS_TYPE = "faiss"
+DEFAULT_VS_TYPE = "adb"
 
 # 缓存向量库数量
 CACHED_VS_NUM = 1
@@ -138,6 +138,9 @@ CHUNK_SIZE = 150
 
 # 知识库中相邻文本重合长度
 OVERLAP_SIZE = 0
+
+# 拼接后上下文长度
+CONTENT_SIZE = 600
 
 # 知识库匹配向量数量
 VECTOR_SEARCH_TOP_K = 5
@@ -181,7 +184,7 @@ BING_SUBSCRIPTION_KEY = ""
 ZH_TITLE_ENHANCE = False
 
 
-
+"""以下是非社区版的参数"""
 # 中文按句切分后，是否需要合并较短的句子(按逗号、空格等切分默认会合并)
 CHINESE_TEXT_SPLITTER_MERGE_SENTENCE = True
 

@@ -68,7 +68,12 @@ def dialogue_page(api: ApiRequest):
 
         if dialogue_mode == "知识库问答":
             with st.expander("知识库配置", True):
-                kb_list = api.list_knowledge_bases(no_remote_api=True)
+                try:
+                    kb_list = api.list_knowledge_bases(no_remote_api=True)
+                except Exception as e:
+                    st.error("获取知识库信息错误，请检查是否已按照 `README.md` 中 `4 知识库初始化与迁移` 步骤完成初始化或迁移，运行init_database.py，或是否为数据库连接错误。")
+                    st.error(e)
+                    st.stop()
                 selected_kb = st.selectbox(
                     "请选择知识库：",
                     kb_list,
@@ -103,7 +108,7 @@ def dialogue_page(api: ApiRequest):
             text = ""
             r = api.chat_chat(prompt, history)
             for t in r:
-                if error_msg := check_error_msg(t): # check whether error occured
+                if error_msg := check_error_msg(t):  # check whether error occured
                     st.error(error_msg)
                     break
                 text += t
@@ -118,19 +123,20 @@ def dialogue_page(api: ApiRequest):
             documents = []
             sources = []
             for d in api.knowledge_base_chat(prompt, selected_kb, kb_top_k, score_threshold, history):
-                if error_msg := check_error_msg(d): # check whether error occured
+                if error_msg := check_error_msg(d):  # check whether error occured
                     st.error(error_msg)
                 text += d["answer"]
                 chat_box.update_msg(text, 0)
                 documents = d["docs"]
                 sources = d["sources"]
             chat_box.update_msg(text, 0, streaming=False)
-            source_ui = []
-            for s in sources:
-                source_ui.append(Markdown("...", in_expander=True, title=s))
-            chat_box.ai_say(source_ui)
-            for i, d in enumerate(documents):
-                chat_box.update_msg(d, i, streaming=False)
+            if sources:
+                source_ui = []
+                for s in sources:
+                    source_ui.append(Markdown("...", in_expander=True, title=s))
+                chat_box.ai_say(source_ui)
+                for i, d in enumerate(documents):
+                    chat_box.update_msg(d, i, streaming=False)
         elif dialogue_mode == "搜索引擎问答":
             chat_box.ai_say([
                 f"正在执行 `{search_engine}` 搜索...",
